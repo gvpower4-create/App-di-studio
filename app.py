@@ -4,87 +4,84 @@ import random
 import PyPDF2
 import re
 import json
-import os
 
 # --- COSTANTI E CONFIGURAZIONI ---
 NOME_MODELLO = 'gemini-3.6-flash'
-FILE_DATI = 'database_nexus.json'
 
 st.set_page_config(page_title="Nexus Study App", page_icon="🧬", layout="wide")
 
-# --- FUNZIONI DI MEMORIA PERMANENTE ---
-def carica_dati():
-    if os.path.exists(FILE_DATI):
-        with open(FILE_DATI, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {}
-
-def salva_dati(dati):
-    with open(FILE_DATI, 'w', encoding='utf-8') as f:
-        json.dump(dati, f, indent=4, ensure_ascii=False)
-
+# --- INIZIALIZZAZIONE VUOTA PER OGNI UTENTE ---
+# Ogni utente che apre il sito parte con un database immacolato
 if 'database_domande' not in st.session_state:
-    st.session_state.database_domande = carica_dati()
+    st.session_state.database_domande = {}
 
-# --- BARRA LATERALE ---
+# --- BARRA LATERALE E GESTIONE PROFILO ---
 st.sidebar.title("🧬 Nexus Ecosistema")
-
-# Cerca la chiave nella cassaforte segreta; se non c'è, lascia il campo vuoto
-chiave_salvata = st.secrets.get("GOOGLE_API_KEY", "")
-
-# Il box di testo si pre-compilerà da solo se la chiave è nella cassaforte
-api_key = st.sidebar.text_input("Inserisci la tua API Key:", value=chiave_salvata, type="password")
+api_key = st.sidebar.text_input("Inserisci la tua API Key:", type="password")
 
 if api_key:
     genai.configure(api_key=api_key)
 else:
     st.sidebar.warning("Inserisci la chiave per attivare l'AI.")
+
 st.sidebar.markdown("---")
-# Abbiamo cambiato il nome della prima modalità
+st.sidebar.subheader("💾 Il tuo Profilo di Studio")
+st.sidebar.caption("L'app non salva dati sul server. Scarica i tuoi progressi a fine sessione!")
+
+# 1. Pulsante per SCARICARE i progressi
+dati_json = json.dumps(st.session_state.database_domande, indent=4)
+st.sidebar.download_button(
+    label="⬇️ Scarica il mio Profilo",
+    data=dati_json,
+    file_name="Mio_Profilo_Nexus.json",
+    mime="application/json"
+)
+
+# 2. Pulsante per CARICARE i progressi precedenti
+file_profilo = st.sidebar.file_uploader("⬆️ Carica il tuo Profilo", type="json")
+if file_profilo is not None:
+    if 'profilo_caricato' not in st.session_state:
+        st.session_state.database_domande = json.load(file_profilo)
+        st.session_state.profilo_caricato = True
+        st.sidebar.success("Profilo ripristinato con successo!")
+        st.rerun()
+
+st.sidebar.markdown("---")
 modalita = st.sidebar.radio("Navigazione:", ["🏠 Home & Statistiche", "⚙️ Aggiungi PDF", "🎙️ Simulazione Esame", "📈 Dashboard Mastery"])
 
 # ==========================================
-# MODULO 1: HOME & STATISTICHE (Rinnovato)
+# MODULO 1: HOME & STATISTICHE
 # ==========================================
 if modalita == "🏠 Home & Statistiche":
     st.title("🏠 Il tuo Ecosistema di Studio")
-    st.write("Panoramica del materiale immagazzinato e pronto per la simulazione.")
     
     if not st.session_state.database_domande:
-        st.info("Il database è vuoto. Vai su 'Aggiungi PDF' per iniziare a studiare!")
+        st.info("L'ambiente è vuoto. Carica il tuo file Profilo dalla barra laterale o vai su 'Aggiungi PDF' per iniziare!")
     else:
-        # Calcolo delle statistiche
         tot_materie = len(st.session_state.database_domande)
         tot_argomenti = sum(len(argomenti) for argomenti in st.session_state.database_domande.values())
         tot_domande = sum(len(domande) for argomenti in st.session_state.database_domande.values() for domande in argomenti.values())
         
-        # UI Grafica a 3 colonne per le metriche
         col1, col2, col3 = st.columns(3)
         col1.metric("📚 Materie Inserite", tot_materie)
         col2.metric("📁 Argomenti Estrapolati", tot_argomenti)
         col3.metric("❓ Domande Generate", tot_domande)
         
         st.markdown("---")
-        st.subheader("Dettaglio Materie")
-        
-        # Mostriamo le materie come "schede" visive
         for materia, argomenti in st.session_state.database_domande.items():
             with st.container():
                 st.markdown(f"### 🧬 {materia}")
                 domande_materia = sum(len(d) for d in argomenti.values())
                 st.caption(f"{len(argomenti)} Argomenti | {domande_materia} Domande totali")
-                
-                # Mostriamo i "tag" degli argomenti presenti in quella materia
                 tags = " | ".join([f"*{arg}*" for arg in argomenti.keys()])
                 st.write(tags)
                 st.markdown("---")
 
 # ==========================================
-# MODULO 2: LETTURA PDF (Invariato graficamente)
+# MODULO 2: LETTURA PDF
 # ==========================================
 elif modalita == "⚙️ Aggiungi PDF":
     st.title("⚙️ Estrazione Massiva per Argomenti")
-    st.write("L'AI analizzerà il PDF, individuerà i macro-argomenti e creerà decine di domande categorizzate.")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -138,13 +135,12 @@ elif modalita == "⚙️ Aggiungi PDF":
                             st.session_state.database_domande[materia_target][argomento_corrente].append({"testo": domanda_testo, "punteggio": 0})
                             totale_domande += 1
                     
-                    salva_dati(st.session_state.database_domande)
-                    st.success(f"✅ Generate {totale_domande} domande. Dati salvati.")
+                    st.success(f"✅ Generate {totale_domande} domande. Ricordati di SCARICARE IL PROFILO prima di uscire!")
                 except Exception as e:
                     st.error(f"Errore: {e}")
 
 # ==========================================
-# MODULO 3: SIMULAZIONE (Prompt Professore Aggiornato)
+# MODULO 3: SIMULAZIONE
 # ==========================================
 elif modalita == "🎙️ Simulazione Esame":
     st.title("🎙️ Simulazione Mirata")
@@ -152,7 +148,7 @@ elif modalita == "🎙️ Simulazione Esame":
     materia_quiz = st.selectbox("Scegli la materia:", list(st.session_state.database_domande.keys()) if st.session_state.database_domande else [])
     
     if not materia_quiz:
-        st.warning("Aggiungi prima una materia.")
+        st.warning("Aggiungi prima una materia o carica il tuo profilo.")
     else:
         argomenti_disponibili = list(st.session_state.database_domande[materia_quiz].keys())
         argomento_scelto = st.selectbox("Focus sull'argomento:", ["Mix Casuale (Tutto)"] + argomenti_disponibili)
@@ -176,19 +172,16 @@ elif modalita == "🎙️ Simulazione Esame":
                 with st.spinner("Valutazione... ⏳"):
                     try:
                         modello = genai.GenerativeModel(NOME_MODELLO)
-                        # --- ECCO IL PROMPT TARATO PER IL 30 E LODE REALISTICO ---
                         prompt = f"""
-                        Agisci come un professore universitario di {materia_quiz}. Stai valutando un'interrogazione.
+                        Agisci come professore universitario di {materia_quiz}. 
                         Domanda: "{st.session_state.domanda_ai['testo']}"
-                        Risposta studente: "{risposta_utente}"
+                        Risposta: "{risposta_utente}"
                         
-                        REGOLA SULLE FORMULE: L'esame è al computer. NON penalizzare lo studente se non scrive formule matematiche, reazioni chimiche o equazioni in formato esatto. Accetta descrizioni a parole delle formule o dei processi.
-                        REGOLA SUL VOTO (Sii realista): Un 30 e lode (100%) si ottiene capendo la logica e i concetti chiave, non richiedendo la perfezione di un libro di testo. Se il concetto e il ragionamento ci sono, assegna tranquillamente 100%. Sii incoraggiante.
+                        REGOLA SULLE FORMULE: Non penalizzare l'assenza di formule matematiche scritte, accetta descrizioni discorsive.
+                        REGOLA SUL VOTO: Un 100% si ottiene capendo la logica.
                         
-                        REGOLA FONDAMENTALE: La primissima riga deve contenere SOLO un numero da 0 a 100 seguito dal % (Es: 100%).
-                        Poi fornisci: 
-                        1. Analisi (cosa va bene, cosa manca). 
-                        2. Trucco Mnemonico.
+                        La primissima riga DEVE contenere SOLO un numero da 0 a 100 seguito dal % (Es: 100%).
+                        Poi fornisci Analisi e Trucco Mnemonico.
                         """
                         risposta_ai = modello.generate_content(prompt)
                         
@@ -196,18 +189,16 @@ elif modalita == "🎙️ Simulazione Esame":
                         if match:
                             voto = int(match.group(1))
                             st.session_state.domanda_ai['punteggio'] = voto
-                            salva_dati(st.session_state.database_domande)
                             if voto >= 90: st.balloons()
                             
                         st.write(risposta_ai.text)
                     except Exception as e: st.error(f"Errore AI: {e}")
 
 # ==========================================
-# MODULO 4: DASHBOARD MASTERY (Aggiunta Generazione Dinamica)
+# MODULO 4: DASHBOARD MASTERY
 # ==========================================
 elif modalita == "📈 Dashboard Mastery":
     st.title("📈 Dashboard a Espansione")
-    st.write("Apri gli argomenti per visualizzare le domande. Clicca sui pulsanti per generare nuove domande al volo.")
     
     materia_dash = st.selectbox("Analizza la materia:", list(st.session_state.database_domande.keys()) if st.session_state.database_domande else [])
     
@@ -216,38 +207,29 @@ elif modalita == "📈 Dashboard Mastery":
         for nome_argomento, lista_domande in argomenti.items():
             with st.expander(f"📁 {nome_argomento} ({len(lista_domande)} domande)"):
                 
-                # --- PULSANTE MAGICO PER GENERARE ALTRE DOMANDE ---
-                if st.button(f"➕ Genera 1 nuova domanda su '{nome_argomento}'", key=f"btn_{nome_argomento}"):
+                if st.button(f"➕ Genera 1 nuova domanda", key=f"btn_{nome_argomento}"):
                     if api_key:
                         with st.spinner("Creazione in corso... ⏳"):
                             modello = genai.GenerativeModel(NOME_MODELLO)
-                            prompt_nuova = f"Sei un professore universitario. Genera UNA singola domanda d'esame complessa sulla materia '{materia_dash}', focalizzata in particolare sull'argomento '{nome_argomento}'. Restituisci SOLO il testo della domanda, senza numerazione o altro."
+                            prompt_nuova = f"Genera UNA singola domanda complessa su '{materia_dash}', focalizzata su '{nome_argomento}'. Restituisci SOLO il testo della domanda."
                             try:
                                 risp = modello.generate_content(prompt_nuova)
                                 nuova_domanda = risp.text.strip()
-                                # Controlla che non sia una domanda vuota
                                 if nuova_domanda:
                                     st.session_state.database_domande[materia_dash][nome_argomento].append({"testo": nuova_domanda, "punteggio": 0})
-                                    salva_dati(st.session_state.database_domande)
                                     st.success("Domanda aggiunta con successo!")
-                                    st.rerun() # Ricarica l'interfaccia per mostrare subito la nuova domanda
-                            except Exception as e:
-                                st.error(f"Errore durante la generazione: {e}")
+                                    st.rerun()
+                            except Exception as e: st.error(f"Errore: {e}")
                     else:
-                        st.error("Inserisci l'API Key nella barra laterale per usare questa funzione.")
+                        st.error("Inserisci l'API Key.")
                 
                 st.markdown("---")
-                
-                # Lista delle domande con le barre di progresso
                 for idx, d in enumerate(lista_domande):
                     col_testo, col_barra = st.columns([3, 1])
                     with col_testo:
                         st.write(f"**{idx + 1}.** {d['testo']}")
                     with col_barra:
                         st.progress(d['punteggio'] / 100)
-                        if d['punteggio'] == 100:
-                            st.success("100%")
-                        elif d['punteggio'] >= 60:
-                            st.warning(f"{d['punteggio']}%")
-                        else:
-                            st.error(f"{d['punteggio']}%")
+                        if d['punteggio'] == 100: st.success("100%")
+                        elif d['punteggio'] >= 60: st.warning(f"{d['punteggio']}%")
+                        else: st.error(f"{d['punteggio']}%")
