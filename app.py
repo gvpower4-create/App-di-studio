@@ -10,8 +10,6 @@ NOME_MODELLO = 'gemini-3.6-flash'
 
 st.set_page_config(page_title="Nexus Study App", page_icon="🧬", layout="wide")
 
-# --- INIZIALIZZAZIONE VUOTA PER OGNI UTENTE ---
-# Ogni utente che apre il sito parte con un database immacolato
 if 'database_domande' not in st.session_state:
     st.session_state.database_domande = {}
 
@@ -28,7 +26,6 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("💾 Il tuo Profilo di Studio")
 st.sidebar.caption("L'app non salva dati sul server. Scarica i tuoi progressi a fine sessione!")
 
-# 1. Pulsante per SCARICARE i progressi
 dati_json = json.dumps(st.session_state.database_domande, indent=4)
 st.sidebar.download_button(
     label="⬇️ Scarica il mio Profilo",
@@ -37,7 +34,6 @@ st.sidebar.download_button(
     mime="application/json"
 )
 
-# 2. Pulsante per CARICARE i progressi precedenti
 file_profilo = st.sidebar.file_uploader("⬆️ Carica il tuo Profilo", type="json")
 if file_profilo is not None:
     if 'profilo_caricato' not in st.session_state:
@@ -47,17 +43,44 @@ if file_profilo is not None:
         st.rerun()
 
 st.sidebar.markdown("---")
-modalita = st.sidebar.radio("Navigazione:", ["🏠 Home & Statistiche", "⚙️ Aggiungi PDF", "🎙️ Simulazione Esame", "📈 Dashboard Mastery"])
+modalita = st.sidebar.radio("Navigazione:", ["🏠 Home & Istruzioni", "⚙️ Aggiungi PDF", "🎙️ Simulazione Esame", "📈 Dashboard Mastery"])
 
 # ==========================================
-# MODULO 1: HOME & STATISTICHE
+# MODULO 1: HOME & ISTRUZIONI (Completamente Rinnovato)
 # ==========================================
-if modalita == "🏠 Home & Statistiche":
-    st.title("🏠 Il tuo Ecosistema di Studio")
+if modalita == "🏠 Home & Istruzioni":
     
+    # SE IL DATABASE E' VUOTO (Utente Nuovo) -> Mostra il Tutorial completo
     if not st.session_state.database_domande:
-        st.info("L'ambiente è vuoto. Carica il tuo file Profilo dalla barra laterale o vai su 'Aggiungi PDF' per iniziare!")
+        st.title("Benvenuto in Nexus Study 🧬")
+        st.write("La piattaforma dinamica per preparare i tuoi esami universitari tramite *Active Recall* e Intelligenza Artificiale.")
+        
+        st.markdown("---")
+        st.subheader("🚀 Guida Rapida in 3 Step")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.info("**1. Accendi il Motore**\n\nPer funzionare, l'app ha bisogno di un 'cervello'. Vai su [Google AI Studio](https://aistudio.google.com/app/apikey), accedi con il tuo account Google e clicca su **Create API Key**. Copia quella stringa segreta e incollala nel box qui a sinistra nella barra laterale. È un'operazione gratuita e sicura.")
+            
+        with col2:
+            st.info("**2. Fornisci il Materiale**\n\nVai nella sezione **⚙️ Aggiungi PDF**. Crea una materia (es. 'Biologia Molecolare' o 'Chimica Organica') e carica un capitolo delle tue dispense. L'AI lo leggerà in pochi secondi, estrarrà gli argomenti principali e genererà domande da esame specifiche, pronte per essere affrontate.")
+            
+        with col3:
+            st.error("**3. SALVA IL TUO PROFILO!**\n\nQuesta app rispetta la tua privacy al 100%: **nessun dato viene salvato sul server**. Quando hai finito di studiare, devi cliccare su **⬇️ Scarica il mio Profilo** a sinistra. Il giorno dopo, ricaricherai quel file per ritrovare tutte le tue domande e i tuoi voti.")
+
+        st.markdown("---")
+        st.subheader("💡 Consigli per il '30 e Lode'")
+        st.markdown("""
+        * **Non impazzire con le formule:** Durante la **🎙️ Simulazione Esame**, il professore virtuale sa che sei al computer. Se ti chiede una struttura molecolare o un'equazione complessa, descrivila a parole o spiegane il meccanismo logico. Prenderai 100% ugualmente.
+        * **Carica a blocchi:** Non inserire PDF da 500 pagine tutti insieme. Carica un capitolo o una tematica alla volta (es. "Cinetica Enzimatica"). Avrai domande molto più precise.
+        * **Usa la Dashboard:** Vai nella **📈 Dashboard Mastery** per vedere dove zoppichi. Lì dentro troverai anche un pulsante magico per farti generare nuove domande al volo sugli argomenti in cui hai preso un voto basso.
+        """)
+
+    # SE IL DATABASE HA DATI -> Mostra le Statistiche (e nasconde il tutorial in un menu a tendina)
     else:
+        st.title("🏠 Il tuo Ecosistema di Studio")
+        
         tot_materie = len(st.session_state.database_domande)
         tot_argomenti = sum(len(argomenti) for argomenti in st.session_state.database_domande.values())
         tot_domande = sum(len(domande) for argomenti in st.session_state.database_domande.values() for domande in argomenti.values())
@@ -76,6 +99,12 @@ if modalita == "🏠 Home & Statistiche":
                 tags = " | ".join([f"*{arg}*" for arg in argomenti.keys()])
                 st.write(tags)
                 st.markdown("---")
+        
+        # Tutorial collassato per chi lo volesse rileggere
+        with st.expander("📖 Rileggi la Guida all'Uso e i Consigli"):
+            st.write("1. **API Key:** Ottienila gratis da [Google AI Studio](https://aistudio.google.com/app/apikey) e incollala a sinistra.")
+            st.write("2. **Privacy:** Ricordati sempre di scaricare il tuo profilo (file JSON) a fine sessione per non perdere i progressi!")
+            st.write("3. **Simulazione:** Descrivi i processi e le formule a parole, l'AI capirà il ragionamento.")
 
 # ==========================================
 # MODULO 2: LETTURA PDF
