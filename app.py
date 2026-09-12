@@ -6,7 +6,7 @@ import re
 import json
 
 # --- COSTANTI E CONFIGURAZIONI ---
-NOME_MODELLO = 'gemini-3.6-flash'
+NOME_MODELLO = 'gemini-3.5-flash-lite'
 
 st.set_page_config(page_title="Nexus Study App", page_icon="🧬", layout="wide")
 
