@@ -49,10 +49,20 @@ def prepara_immagine_lavagna(canvas_result):
     Questa funzione compone correttamente il disegno su uno sfondo bianco reale.
     Restituisce None se il canvas è vuoto (nessun pixel disegnato).
     """
-    if canvas_result is None or canvas_result.image_data is None:
+    if canvas_result is None:
         return None
 
-    img_array = canvas_result.image_data.astype('uint8')
+    try:
+        dati_immagine = canvas_result.image_data
+    except RuntimeError:
+        # Capita se return_image_data=True non è stato passato a st_canvas,
+        # oppure se il componente non ha ancora inviato dati (canvas appena montato).
+        return None
+
+    if dati_immagine is None:
+        return None
+
+    img_array = dati_immagine.astype('uint8')
 
     # Canale alpha tutto a zero = non è stato disegnato nulla
     if img_array.shape[-1] == 4 and img_array[:, :, 3].max() == 0:
@@ -276,6 +286,7 @@ elif modalita == "🎙️ Simulazione Esame":
                 width=700,
                 height=350,
                 drawing_mode=drawing_mode,
+                return_image_data=True,  # OBBLIGATORIO da streamlit-drawable-canvas 0.10.0: senza questo, .image_data solleva RuntimeError
                 key="canvas_principale_univoco",
             )
 
