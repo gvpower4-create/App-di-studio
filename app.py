@@ -365,17 +365,29 @@ elif modalita == "🎙️ Simulazione Esame":
             elif api_key:
                 with st.spinner("Il professore sta analizzando il tuo elaborato... ⏳"):
                     try:
-                        prompt_prof = f"""Sei un professore universitario di {materia_quiz}.
-Valuta lo studente di biotecnologie in modo preciso e incoraggiante.
-Domanda: "{st.session_state.domanda_ai['testo']}"
+                        prompt_prof = f"""Sei un professore universitario di {materia_quiz}, rigoroso ma costruttivo nel tono.
 
-L'utente ha risposto con del testo ("{testo_per_ai}") e/o con un'immagine allegata.
-Valuta l'accuratezza scientifica globale, decifrando eventuali formule matematiche, strutture chimiche o grafici disegnati a mano.
+DOMANDA D'ESAME:
+"{st.session_state.domanda_ai['testo']}"
 
-REGOLA SUL VOTO: Un 100% si ottiene dimostrando di aver capito il meccanismo logico.
+RISPOSTA DELLO STUDENTE (testo e/o immagine allegata):
+Testo: "{testo_per_ai if testo_per_ai.strip() else '(nessuna nota testuale, vedi solo immagine)'}"
 
-La primissima riga DEVE contenere SOLO il voto da 0 a 100 seguito dal % (Es: 100%).
-Poi scrivi l'Analisi e un Trucco Mnemonico."""
+ISTRUZIONI - segui questi passaggi ESATTAMENTE in ordine:
+
+1. TRASCRIZIONE FEDELE: prima di tutto, descrivi SOLO ciò che è effettivamente visibile o scritto nella risposta (formule, testo, disegni). Non aggiungere, completare o correggere mentalmente nulla che lo studente non abbia realmente scritto, anche se ti aspetteresti di vederlo per rispondere pienamente alla domanda. Se la scrittura è poco leggibile o ambigua, dillo esplicitamente invece di indovinare.
+
+2. CONFRONTO CON LA DOMANDA: elenca esplicitamente quali punti richiesti dalla domanda sono stati affrontati nella trascrizione del punto 1, e quali invece MANCANO o sono incompleti. Sii specifico.
+
+3. VOTO ONESTO: un voto alto (90-100%) richiede che OGNI parte della domanda sia stata trattata correttamente in ciò che lo studente ha realmente scritto. Se lo studente ha svolto solo una parte della domanda (anche se quella parte è perfetta), il voto deve riflettere la percentuale di domanda effettivamente coperta, non la qualità della sola parte svolta. Non essere generoso per incoraggiamento: sii onesto, il tono incoraggiante va nel testo dell'analisi, non nel voto.
+
+FORMATO DI OUTPUT RICHIESTO (rispetta esattamente questa struttura):
+Riga 1: SOLO il voto da 0 a 100 seguito da % (Es: 65%)
+Poi:
+**Cosa hai scritto:** [la trascrizione fedele del punto 1]
+**Cosa manca rispetto alla domanda:** [punto 2, oppure "Nulla, hai coperto tutta la domanda" se è davvero così]
+**Analisi:** [valutazione di ciò che hai scritto]
+**Trucco Mnemonico:** [...]"""
 
                         risposta_finale = interroga_ai_con_fallback(prompt_prof, immagine_pill=immagine_da_inviare)
 
