@@ -1,8 +1,5 @@
 streamlit
 google-generativeai
 PyPDF2
-streamlit
-google-generativeai
-PyPDF2
 streamlit-drawable-canvas
 Pillow
