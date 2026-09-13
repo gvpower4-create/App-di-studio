@@ -211,9 +211,8 @@ elif modalita == "🎙️ Simulazione Esame":
         
         if tipo_risposta == "⌨️ Testo Classico":
             risposta_testuale = st.text_area("Scrivi qui la tua risposta:", height=150)
-            
-        elif tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
-            st.write("Usa il mouse, il dito o il pennino. Gli strumenti ti aiutano a disegnare grafici perfetti.")
+            elif tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
+            st.write("Usa il mouse o il pennino. **Attendi che compaia la spunta verde in basso prima di inviare!**")
             
             # --- TOOLBOX DELLA LAVAGNA ---
             col_tool, col_size = st.columns([2, 1])
@@ -243,38 +242,42 @@ elif modalita == "🎙️ Simulazione Esame":
                 stroke_width=stroke_width,
                 stroke_color=stroke_color,
                 background_color="#FFFFFF",
-                width=800,
-                height=500,
+                width=700, # Dimensioni ottimizzate per evitare il blocco del server Cloud
+                height=350, # Dimensioni ottimizzate
                 drawing_mode=drawing_mode,
-                key="canvas_principale_univoco", 
+                key="canvas_principale_univoco",
             )
             
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco")
             
-           # --- SALVATAGGIO IN VESCICOLA DI MEMORIA (LA VERA CURA) ---
+            # --- MOTORE DI CATTURA (Leggero e con Feedback) ---
+            if 'disegno_corrente' not in st.session_state:
+                st.session_state.disegno_corrente = None
+
             if canvas_result is not None:
                 try:
-                    # Tutto il controllo pericoloso DEVE stare qui dentro!
-                    # Se il browser è in ritardo, la riga qui sotto fallisce e scatta subito l'except.
-                    immagine_grezza = canvas_result.image_data 
-                    
-                    if immagine_grezza is not None:
-                        # Controlliamo se c'è effettivamente dell'inchiostro (oggetti) sulla lavagna
-                        if canvas_result.json_data is not None and "objects" in canvas_result.json_data:
-                            if len(canvas_result.json_data["objects"]) > 0:
-                                immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
-                                st.session_state.disegno_corrente = immagine_convertita.convert('RGB')
-                            else:
-                                st.session_state.disegno_corrente = None # Svuota la memoria se cancella tutto
-                except RuntimeError:
-                    # Se il browser va in panico durante il ricaricamento, noi lo ignoriamo.
-                    # L'immagine salvata prima del clic rimarrà intatta nella memoria!
+                    # Controlliamo che il JSON non sia vuoto
+                    if canvas_result.json_data is not None and "objects" in canvas_result.json_data:
+                        if len(canvas_result.json_data["objects"]) > 0:
+                            img_array = canvas_result.image_data
+                            if img_array is not None:
+                                img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
+                                st.session_state.disegno_corrente = img_rgba.convert('RGB')
+                        else:
+                            st.session_state.disegno_corrente = None
+                except Exception:
+                    # Cattura qualsiasi ritardo di rete senza far crashare nulla
                     pass
 
-            # Recuperiamo il disegno sano e salvo
+            # --- IL SEMAFORO VERDE ---
             immagine_da_inviare = st.session_state.get('disegno_corrente', None)
             
+            if immagine_da_inviare is not None:
+                st.success("✅ Lavagna acquisita in memoria! Ora puoi inviare la risposta.")
+            else:
+                st.info("Attendo un disegno sulla lavagna... ⏳")
+
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
             if risposta_testuale.strip() == "" and immagine_da_inviare is None:
