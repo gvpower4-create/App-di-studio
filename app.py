@@ -258,14 +258,25 @@ elif modalita == "🎙️ Simulazione Esame":
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:")
             
-            # PROTEZIONE ANTI-CRASH (Risolve l'errore RuntimeError)
-            # Verifichiamo che il canvas esista, che abbia l'attributo image_data e che non sia vuoto
-            if canvas_result is not None and getattr(canvas_result, 'image_data', None) is not None:
-                immagine_grezza = canvas_result.image_data
-                # Convertiamo la matrice in Immagine per l'AI
-                immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
-                # Togliamo la trasparenza per farla leggere al Prof virtuale
-                immagine_da_inviare = immagine_convertita.convert('RGB')
+           st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
+            risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:")
+            
+            # --- PROTEZIONE ANTI-CRASH DEFINITIVA ---
+            immagine_da_inviare = None
+            if canvas_result is not None:
+                try:
+                    # Proviamo ad accedere ai dati dell'immagine
+                    immagine_grezza = canvas_result.image_data
+                    
+                    # Se non è vuota, la convertiamo per l'AI
+                    if immagine_grezza is not None:
+                        immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
+                        immagine_da_inviare = immagine_convertita.convert('RGB')
+                        
+                except RuntimeError:
+                    # Se il browser non ha ancora inviato i dati e la libreria lancia l'errore, 
+                    # lo catturiamo e lo ignoriamo silenziosamente senza far crashare l'app.
+                    pass
 
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
