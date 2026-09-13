@@ -296,6 +296,26 @@ elif modalita == "🎙️ Simulazione Esame":
                 key="testo_lavagna_univoco"
             )
 
+            # --- PANNELLO DI DEBUG TEMPORANEO ---
+            # Serve solo per capire perché l'immagine non arriva: da rimuovere
+            # una volta risolto il problema.
+            with st.expander("🔧 Debug canvas (temporaneo)"):
+                st.write(f"canvas_result è None? **{canvas_result is None}**")
+                if canvas_result is not None:
+                    st.write(f"json_data presente? **{canvas_result.json_data is not None}**")
+                    if canvas_result.json_data is not None:
+                        n_oggetti = len(canvas_result.json_data.get("objects", []))
+                        st.write(f"Numero di oggetti disegnati (json_data): **{n_oggetti}**")
+                    try:
+                        dati = canvas_result.image_data
+                        if dati is None:
+                            st.write("`image_data` è **None**")
+                        else:
+                            st.write(f"`image_data` shape: **{dati.shape}**, dtype: **{dati.dtype}**")
+                            st.write(f"Valore massimo canale alpha: **{dati[:, :, 3].max() if dati.shape[-1] == 4 else 'N/A (no alpha)'}**")
+                    except RuntimeError as e:
+                        st.write(f"`image_data` ha sollevato RuntimeError: **{e}**")
+
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
             # Ricalcoliamo l'immagine QUI, nello stesso run del click, usando
