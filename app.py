@@ -253,18 +253,27 @@ elif modalita == "🎙️ Simulazione Esame":
             # ECCO LA CORREZIONE: Abbiamo aggiunto key="testo_lavagna"
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna")
             
-            # --- PROTEZIONE ANTI-CRASH DEFINITIVA ---
-            immagine_da_inviare = None
-            if canvas_result is not None:
-                try:
-                    immagine_grezza = canvas_result.image_data
-                    if immagine_grezza is not None:
-                        immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
-                        immagine_da_inviare = immagine_convertita.convert('RGB')
-                except RuntimeError:
-                    pass
+          st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
+            risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna")
+            
+            # --- SALVATAGGIO IN VESCICOLA DI MEMORIA (Anti-Crash e Anti-Vuoto) ---
+            # Controlliamo se ci sono dati e se l'utente ha tracciato almeno un tratto (objects > 0)
+            if canvas_result is not None and canvas_result.json_data is not None:
+                if len(canvas_result.json_data.get("objects", [])) > 0:
+                    try:
+                        immagine_grezza = canvas_result.image_data
+                        if immagine_grezza is not None:
+                            immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
+                            # Salviamo l'immagine al sicuro nella sessione
+                            st.session_state.disegno_corrente = immagine_convertita.convert('RGB')
+                    except RuntimeError:
+                        pass # Ignoriamo il ritardo del browser
+                else:
+                    # Se l'utente usa la gomma e cancella tutto, svuotiamo la memoria
+                    st.session_state.disegno_corrente = None
 
-        # --- INVIO AL PROFESSORE ---
+            # Recuperiamo il disegno sano e salvo dalla cassaforte
+            immagine_da_inviare = st.session_state.get('disegno_corrente', None)
 
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
