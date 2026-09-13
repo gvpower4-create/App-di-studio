@@ -3,3 +3,4 @@ google-generativeai
 PyPDF2
 streamlit-drawable-canvas
 Pillow
+streamlit-local-storage
