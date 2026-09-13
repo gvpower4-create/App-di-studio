@@ -213,7 +213,7 @@ elif modalita == "🎙️ Simulazione Esame":
             risposta_testuale = st.text_area("Scrivi qui la tua risposta:", height=150)
             
         elif tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
-            st.write("Usa il mouse o il pennino. **Attendi che compaia la spunta verde in basso prima di inviare!**")
+            st.write("Usa il mouse o il pennino. **Attendi la spunta verde in basso prima di inviare!**")
             
             # --- TOOLBOX DELLA LAVAGNA ---
             col_tool, col_size = st.columns([2, 1])
@@ -238,13 +238,17 @@ elif modalita == "🎙️ Simulazione Esame":
             elif tipo_strumento == "⭕ Cerchio": drawing_mode = "circle"
             elif tipo_strumento == "🟩 Rettangolo": drawing_mode = "rect"
 
+            # TRUCCO MAGICO: Creiamo un vero e proprio "foglio di carta" fisico in Python.
+            # Questo forza la lavagna a generare sempre i pixel, bypassando il bug!
+            foglio_di_carta = Image.new("RGB", (700, 350), (255, 255, 255))
+
             canvas_result = st_canvas(
                 fill_color="rgba(0, 0, 0, 0)",
                 stroke_width=stroke_width,
                 stroke_color=stroke_color,
-                background_color="#FFFFFF",
-                width=700, # Dimensioni ottimizzate per evitare il blocco del server Cloud
-                height=350, # Dimensioni ottimizzate
+                background_image=foglio_di_carta, # Usiamo l'immagine fisica al posto del colore CSS
+                width=700,
+                height=350,
                 drawing_mode=drawing_mode,
                 key="canvas_principale_univoco",
             )
@@ -252,40 +256,25 @@ elif modalita == "🎙️ Simulazione Esame":
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco")
             
-            # --- MOTORE DI CATTURA (Corretto definitivamente) ---
+            # --- MOTORE DI CATTURA (Infallibile con Foglio Fisico) ---
             if 'disegno_corrente' not in st.session_state:
                 st.session_state.disegno_corrente = None
 
             if canvas_result is not None:
-                try: 
-                    # LA BARRIERA INIZIA QUI: tutto il codice pericoloso è al sicuro
-                    # Se il browser è in ritardo, questa riga fallisce e salta silenziosamente all'except
-                    img_array = canvas_result.image_data
-                    
-                    if img_array is not None:
-                        img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
-                        st.session_state.disegno_corrente = img_rgba.convert('RGB')
-                        
-                        # Controlliamo se la lavagna è stata svuotata (es. ha usato la gomma su tutto)
-                        if canvas_result.json_data:
-                            dati_json = canvas_result.json_data
-                            
-                            # Decodifica se è in formato testo
-                            if isinstance(dati_json, str):
-                                try:
-                                    dati_json = json.loads(dati_json)
-                                except:
-                                    dati_json = {}
-                                    
-                            # Se ci sono 0 oggetti, svuotiamo la memoria
-                            if isinstance(dati_json, dict) and "objects" in dati_json:
-                                if len(dati_json["objects"]) == 0:
-                                    st.session_state.disegno_corrente = None
-                
+                try:
+                    # Controlliamo che l'utente abbia tracciato almeno un segno
+                    if canvas_result.json_data is not None and "objects" in canvas_result.json_data:
+                        if len(canvas_result.json_data["objects"]) > 0:
+                            # Grazie al foglio fisico, questo comando estrarrà sempre i dati senza fallire
+                            img_array = canvas_result.image_data
+                            if img_array is not None:
+                                img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
+                                st.session_state.disegno_corrente = img_rgba.convert('RGB')
+                        else:
+                            st.session_state.disegno_corrente = None
                 except RuntimeError:
-                    # Assorbiamo l'impatto: se c'è l'errore, non facciamo nulla e usiamo l'immagine salvata in precedenza.
                     pass
-                    
+
             # --- IL SEMAFORO VERDE ---
             immagine_da_inviare = st.session_state.get('disegno_corrente', None)
             
@@ -293,7 +282,7 @@ elif modalita == "🎙️ Simulazione Esame":
                 st.success("✅ Lavagna acquisita in memoria! Ora puoi inviare la risposta.")
             else:
                 st.info("Attendo un disegno sulla lavagna... ⏳")
-                
+
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
             if risposta_testuale.strip() == "" and immagine_da_inviare is None:
