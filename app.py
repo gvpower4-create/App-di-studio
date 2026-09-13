@@ -250,12 +250,13 @@ elif modalita == "🎙️ Simulazione Esame":
                 key="canvas_principale_univoco",
             )
             
-            # Salvataggio immediato in sessione appena la canvas produce dati
-            if canvas_result is not None and canvas_result.image_data is not None:
+            # BLOCCO PROTETTO: Nessun accesso diretto fuori dal try
+            if canvas_result is not None:
                 try:
-                    img_array = canvas_result.image_data
-                    img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
-                    st.session_state.ultima_immagine_lavagna = img_rgba.convert('RGB')
+                    img_array = getattr(canvas_result, 'image_data', None)
+                    if img_array is not None:
+                        img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
+                        st.session_state.ultima_immagine_lavagna = img_rgba.convert('RGB')
                 except Exception:
                     pass
 
