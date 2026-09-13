@@ -5,9 +5,11 @@ import PyPDF2
 import re
 import json
 import io
+import time
 import numpy as np
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
+from streamlit_local_storage import LocalStorage
 
 # --- COSTANTI E CONFIGURAZIONI ---
 LISTA_MODELLI = [
@@ -19,8 +21,46 @@ LISTA_MODELLI = [
 
 st.set_page_config(page_title="Nexus Study App", page_icon="🧬", layout="wide")
 
+# --- LOCAL STORAGE DEL BROWSER (isolato per ogni visitatore del link) ---
+localS = LocalStorage()
+CHIAVE_PROFILO_LOCALE = "nexus_profilo_v1"
+CHIAVE_API_KEY_LOCALE = "nexus_api_key_v1"
+
+
+def salva_profilo_locale(contesto="generico"):
+    """Salva silenziosamente il profilo corrente nel local storage di QUESTO browser.
+    Non blocca mai l'app: se il salvataggio fallisce per qualche motivo, l'utente
+    ha comunque i pulsanti di Scarica/Carica manuale come rete di sicurezza."""
+    try:
+        localS.setItem(
+            CHIAVE_PROFILO_LOCALE,
+            json.dumps(st.session_state.database_domande),
+            key=f"salva_profilo_{contesto}"
+        )
+        time.sleep(0.3)  # dà tempo al browser di completare la scrittura
+    except Exception:
+        pass
+
+
 if 'database_domande' not in st.session_state:
     st.session_state.database_domande = {}
+
+# Al primo caricamento della sessione, prova a ripristinare automaticamente
+# il profilo salvato in precedenza in QUESTO browser.
+if 'profilo_locale_caricato' not in st.session_state:
+    st.session_state.profilo_locale_caricato = True
+    profilo_salvato = localS.getItem(CHIAVE_PROFILO_LOCALE, key="carica_profilo_iniziale")
+    if profilo_salvato:
+        try:
+            st.session_state.database_domande = json.loads(profilo_salvato)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+# Stessa logica per l'API key, ma solo se l'utente ha esplicitamente
+# scelto di farla ricordare (vedi checkbox in sidebar più sotto).
+if 'api_key_locale_precaricata' not in st.session_state:
+    valore_salvato = localS.getItem(CHIAVE_API_KEY_LOCALE, key="carica_api_key_iniziale")
+    st.session_state.api_key_locale_precaricata = valore_salvato if valore_salvato else ""
 
 # --- FUNZIONE MOTORE IA (MULTIMODALE CON FALLBACK) ---
 def interroga_ai_con_fallback(prompt_testo, immagine_pill=None):
@@ -96,7 +136,25 @@ def prepara_immagine_lavagna(canvas_result):
 
 # --- BARRA LATERALE E GESTIONE PROFILO ---
 st.sidebar.title("🧬 Nexus Ecosistema")
-api_key = st.sidebar.text_input("Inserisci la tua API Key:", type="password")
+api_key = st.sidebar.text_input(
+    "Inserisci la tua API Key:",
+    type="password",
+    value=st.session_state.api_key_locale_precaricata
+)
+
+ricorda_api_key = st.sidebar.checkbox(
+    "🔒 Ricorda la mia API Key su questo browser",
+    value=bool(st.session_state.api_key_locale_precaricata),
+    help="Salvata solo nel local storage di QUESTO browser, mai su un server. "
+         "Non abilitarla su dispositivi condivisi o pubblici."
+)
+
+if ricorda_api_key and api_key and api_key != st.session_state.api_key_locale_precaricata:
+    localS.setItem(CHIAVE_API_KEY_LOCALE, api_key, key="salva_api_key")
+    st.session_state.api_key_locale_precaricata = api_key
+elif not ricorda_api_key and st.session_state.api_key_locale_precaricata:
+    localS.setItem(CHIAVE_API_KEY_LOCALE, "", key="rimuovi_api_key")
+    st.session_state.api_key_locale_precaricata = ""
 
 if api_key:
     genai.configure(api_key=api_key)
@@ -105,11 +163,18 @@ else:
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("💾 Il tuo Profilo di Studio")
-st.sidebar.caption("L'app non salva dati sul server. Scarica i tuoi progressi a fine sessione!")
+st.sidebar.caption(
+    "✅ Salvataggio automatico attivo in questo browser. "
+    "Scarica comunque un backup se vuoi portare i progressi su un altro dispositivo."
+)
+
+if st.sidebar.button("🔄 Forza sincronizzazione ora"):
+    salva_profilo_locale("manuale")
+    st.sidebar.success("Profilo sincronizzato con il local storage!")
 
 dati_json = json.dumps(st.session_state.database_domande, indent=4)
 st.sidebar.download_button(
-    label="⬇️ Scarica il mio Profilo",
+    label="⬇️ Scarica il mio Profilo (backup)",
     data=dati_json,
     file_name="Mio_Profilo_Nexus.json",
     mime="application/json"
@@ -120,6 +185,7 @@ if file_profilo is not None:
     if 'profilo_caricato' not in st.session_state:
         st.session_state.database_domande = json.load(file_profilo)
         st.session_state.profilo_caricato = True
+        salva_profilo_locale("upload")
         st.sidebar.success("Profilo ripristinato con successo!")
         st.rerun()
 
@@ -233,7 +299,8 @@ elif modalita == "⚙️ Aggiungi PDF":
                             st.session_state.database_domande[materia_target][argomento_corrente].append({"testo": domanda_testo, "punteggio": 0})
                             totale_domande += 1
 
-                    st.success(f"✅ Generate {totale_domande} domande. Ricordati di SCARICARE IL PROFILO prima di uscire!")
+                    salva_profilo_locale("pdf")
+                    st.success(f"✅ Generate {totale_domande} domande. Salvate automaticamente in questo browser!")
                 except Exception as e:
                     st.error(f"Errore critico: {e}")
 
@@ -316,40 +383,6 @@ elif modalita == "🎙️ Simulazione Esame":
                 key="testo_lavagna_univoco"
             )
 
-            # --- PANNELLO DI DEBUG TEMPORANEO ---
-            # Serve solo per capire perché l'immagine non arriva: da rimuovere
-            # una volta risolto il problema.
-            with st.expander("🔧 Debug canvas (temporaneo)"):
-                st.write(f"canvas_result è None? **{canvas_result is None}**")
-                if canvas_result is not None:
-                    st.write(f"json_data presente? **{canvas_result.json_data is not None}**")
-                    if canvas_result.json_data is not None:
-                        n_oggetti = len(canvas_result.json_data.get("objects", []))
-                        st.write(f"Numero di oggetti disegnati (json_data): **{n_oggetti}**")
-
-                    try:
-                        pb = canvas_result.image_bytes
-                        st.write(f"`image_bytes`: **{len(pb) if pb else 0} byte**" if pb is not None else "`image_bytes` è **None**")
-                    except (RuntimeError, AttributeError) as e:
-                        st.write(f"`image_bytes` non disponibile: **{e}**")
-
-                    try:
-                        dati = canvas_result.image_data
-                        if dati is None:
-                            st.write("`image_data` è **None**")
-                        else:
-                            st.write(f"`image_data` shape: **{dati.shape}**, dtype: **{dati.dtype}**")
-                            st.write(f"Valore massimo canale alpha: **{dati[:, :, 3].max() if dati.shape[-1] == 4 else 'N/A (no alpha)'}**")
-                    except RuntimeError as e:
-                        st.write(f"`image_data` ha sollevato RuntimeError: **{e}**")
-
-                    immagine_test = prepara_immagine_lavagna(canvas_result)
-                    if immagine_test is not None:
-                        st.success("✅ prepara_immagine_lavagna ha prodotto un'immagine!")
-                        st.image(immagine_test)
-                    else:
-                        st.error("❌ prepara_immagine_lavagna restituisce ancora None")
-
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
             # Ricalcoliamo l'immagine QUI, nello stesso run del click, usando
@@ -397,6 +430,7 @@ Poi:
                         if match:
                             voto = int(match.group(1))
                             st.session_state.domanda_ai['punteggio'] = voto
+                            salva_profilo_locale("voto")
                             if voto >= 90: st.balloons()
 
                         st.write(risposta_finale)
@@ -434,6 +468,7 @@ elif modalita == "📈 Dashboard Mastery":
 
                                 if nuova_domanda:
                                     st.session_state.database_domande[materia_dash][nome_argomento].append({"testo": nuova_domanda, "punteggio": 0})
+                                    salva_profilo_locale("dashboard")
                                     st.success("Domanda aggiunta con successo!")
                                     st.rerun()
                             except Exception as e:
