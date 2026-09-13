@@ -253,7 +253,7 @@ elif modalita == "🎙️ Simulazione Esame":
             # ECCO LA CORREZIONE: Abbiamo aggiunto key="testo_lavagna"
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna")
             
-          st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
+            st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna")
             
             # --- SALVATAGGIO IN VESCICOLA DI MEMORIA (Anti-Crash e Anti-Vuoto) ---
