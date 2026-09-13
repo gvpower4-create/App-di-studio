@@ -37,6 +37,33 @@ def interroga_ai_con_fallback(prompt_testo, immagine_pill=None):
             continue
     raise Exception("Tutti i modelli AI sono momentaneamente bloccati. Riprova tra poco.")
 
+
+# --- FUNZIONE CORRETTA: composita il disegno (RGBA trasparente) su sfondo bianco ---
+def prepara_immagine_lavagna(canvas_result):
+    """
+    st_canvas restituisce in image_data SOLO il livello disegnato, con alpha=0
+    ovunque non si sia scritto nulla. Se si scarta l'alpha con .convert('RGB')
+    senza comporre prima su uno sfondo bianco, tutta l'area non disegnata
+    diventa NERA (0,0,0) e il tratto nero della penna sparisce dentro di essa:
+    il risultato è un'immagine praticamente illeggibile per l'AI.
+    Questa funzione compone correttamente il disegno su uno sfondo bianco reale.
+    Restituisce None se il canvas è vuoto (nessun pixel disegnato).
+    """
+    if canvas_result is None or canvas_result.image_data is None:
+        return None
+
+    img_array = canvas_result.image_data.astype('uint8')
+
+    # Canale alpha tutto a zero = non è stato disegnato nulla
+    if img_array.shape[-1] == 4 and img_array[:, :, 3].max() == 0:
+        return None
+
+    disegno_rgba = Image.fromarray(img_array, 'RGBA')
+    sfondo_bianco = Image.new('RGBA', disegno_rgba.size, (255, 255, 255, 255))
+    immagine_finale = Image.alpha_composite(sfondo_bianco, disegno_rgba)
+    return immagine_finale.convert('RGB')
+
+
 # --- BARRA LATERALE E GESTIONE PROFILO ---
 st.sidebar.title("🧬 Nexus Ecosistema")
 api_key = st.sidebar.text_input("Inserisci la tua API Key:", type="password")
@@ -76,10 +103,10 @@ if modalita == "🏠 Home & Istruzioni":
     if not st.session_state.database_domande:
         st.title("Benvenuto in Nexus Study 🧬")
         st.write("La piattaforma dinamica per preparare i tuoi esami universitari tramite *Active Recall* e Intelligenza Artificiale.")
-        
+
         st.markdown("---")
         st.subheader("🚀 Guida Rapida in 3 Step")
-        
+
         col1, col2, col3 = st.columns(3)
         with col1:
             st.info("**1. Accendi il Motore**\n\nOttieni una API Key da [Google AI Studio](https://aistudio.google.com/app/apikey) e incollala qui a sinistra.")
@@ -97,16 +124,16 @@ if modalita == "🏠 Home & Istruzioni":
         """)
     else:
         st.title("🏠 Il tuo Ecosistema di Studio")
-        
+
         tot_materie = len(st.session_state.database_domande)
         tot_argomenti = sum(len(argomenti) for argomenti in st.session_state.database_domande.values())
         tot_domande = sum(len(domande) for argomenti in st.session_state.database_domande.values() for domande in argomenti.values())
-        
+
         col1, col2, col3 = st.columns(3)
         col1.metric("📚 Materie Inserite", tot_materie)
         col2.metric("📁 Argomenti Estrapolati", tot_argomenti)
         col3.metric("❓ Domande Generate", tot_domande)
-        
+
         st.markdown("---")
         for materia, argomenti in st.session_state.database_domande.items():
             with st.container():
@@ -116,7 +143,7 @@ if modalita == "🏠 Home & Istruzioni":
                 tags = " | ".join([f"*{arg}*" for arg in argomenti.keys()])
                 st.write(tags)
                 st.markdown("---")
-        
+
         with st.expander("📖 Rileggi la Guida all'Uso e i Consigli"):
             st.write("1. **API Key:** Ottienila gratis da Google AI Studio e incollala a sinistra.")
             st.write("2. **Privacy:** Ricordati sempre di scaricare il tuo profilo (file JSON) a fine sessione!")
@@ -127,18 +154,18 @@ if modalita == "🏠 Home & Istruzioni":
 # ==========================================
 elif modalita == "⚙️ Aggiungi PDF":
     st.title("⚙️ Estrazione Massiva per Argomenti")
-    
+
     col1, col2 = st.columns(2)
     with col1:
         materie_esistenti = list(st.session_state.database_domande.keys())
         scelta_materia = st.selectbox("Materia:", ["-- Nuova Materia --"] + materie_esistenti)
     with col2:
         nuova_materia = st.text_input("Oppure crea Nuova Materia:")
-    
+
     materia_target = nuova_materia if nuova_materia else (scelta_materia if scelta_materia != "-- Nuova Materia --" else None)
     tipo_esame = st.radio("Tipo di esame:", ["Orale (Discorsive)", "Scritto (Specifiche)"])
     file_pdf = st.file_uploader("Carica dispense PDF", type="pdf")
-    
+
     if st.button("Genera Domande da tutto il PDF"):
         if not api_key or not materia_target or not file_pdf:
             st.error("Assicurati di aver inserito chiave, materia e file.")
@@ -147,7 +174,7 @@ elif modalita == "⚙️ Aggiungi PDF":
                 try:
                     lettore = PyPDF2.PdfReader(file_pdf)
                     testo_estratto = "".join([pagina.extract_text() for pagina in lettore.pages])
-                    
+
                     prompt = f"""
                     Agisci come professore di {materia_target}. Leggi: "{testo_estratto}"
                     Identifica i macro-argomenti e genera 3-5 domande per un esame {tipo_esame}.
@@ -157,14 +184,14 @@ elif modalita == "⚙️ Aggiungi PDF":
                     - [Domanda 2]
                     """
                     testo_risposta_ai = interroga_ai_con_fallback(prompt)
-                    
+
                     if materia_target not in st.session_state.database_domande:
                         st.session_state.database_domande[materia_target] = {}
-                    
+
                     righe = testo_risposta_ai.strip().split('\n')
                     argomento_corrente = "Varie"
                     totale_domande = 0
-                    
+
                     for riga in righe:
                         riga = riga.strip()
                         if riga.startswith("### ARGOMENTO:"):
@@ -175,61 +202,63 @@ elif modalita == "⚙️ Aggiungi PDF":
                             domanda_testo = riga.replace("- ", "").strip()
                             st.session_state.database_domande[materia_target][argomento_corrente].append({"testo": domanda_testo, "punteggio": 0})
                             totale_domande += 1
-                    
+
                     st.success(f"✅ Generate {totale_domande} domande. Ricordati di SCARICARE IL PROFILO prima di uscire!")
                 except Exception as e:
                     st.error(f"Errore critico: {e}")
+
 # ==========================================
-# MODULO 3: SIMULAZIONE (IL NUOVO MOTORE MULTIMODALE)
+# MODULO 3: SIMULAZIONE (MOTORE MULTIMODALE - CORRETTO)
 # ==========================================
 elif modalita == "🎙️ Simulazione Esame":
     st.title("🎙️ Simulazione Interattiva")
-    
+
     materia_quiz = st.selectbox("Scegli la materia:", list(st.session_state.database_domande.keys()) if st.session_state.database_domande else [])
-    
+
     if not materia_quiz:
         st.warning("Aggiungi prima una materia o carica il tuo profilo.")
     else:
         argomenti_disponibili = list(st.session_state.database_domande[materia_quiz].keys())
         argomento_scelto = st.selectbox("Focus sull'argomento:", ["Mix Casuale (Tutto)"] + argomenti_disponibili)
-        
+
         if 'domanda_ai' not in st.session_state or st.button("🔄 Prossima Domanda"):
             if argomento_scelto == "Mix Casuale (Tutto)":
                 argomento_random = random.choice(argomenti_disponibili)
                 st.session_state.domanda_ai = random.choice(st.session_state.database_domande[materia_quiz][argomento_random])
             else:
                 st.session_state.domanda_ai = random.choice(st.session_state.database_domande[materia_quiz][argomento_scelto])
-            
+
         st.info(f"**Domanda:** {st.session_state.domanda_ai['testo']}")
         st.caption(f"Ultimo punteggio: {st.session_state.domanda_ai['punteggio']}%")
-        
+
         # --- SCELTA DELLA MODALITA' DI RISPOSTA ---
         tipo_risposta = st.radio("Scegli come rispondere:", ["⌨️ Testo Classico", "🖍️ Lavagna Interattiva (Disegno/Formule)"])
-        
+
         risposta_testuale = ""
-        immagine_da_inviare = None
-        
+        nota_aggiuntiva = ""
+        canvas_result = None
+
         if tipo_risposta == "⌨️ Testo Classico":
             risposta_testuale = st.text_area("Scrivi qui la tua risposta:", height=150)
-            
+
         elif tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
             st.write("Usa il mouse o il pennino per disegnare le tue formule o grafici.")
-            
+
             col_tool, col_size = st.columns([2, 1])
             with col_tool:
                 tipo_strumento = st.radio(
-                    "Strumento:", 
-                    ["✏️ Penna", "🧼 Gomma", "📏 Linea", "⭕ Cerchio", "🟩 Rettangolo"], 
+                    "Strumento:",
+                    ["✏️ Penna", "🧼 Gomma", "📏 Linea", "⭕ Cerchio", "🟩 Rettangolo"],
                     horizontal=True
                 )
             with col_size:
                 stroke_width = st.slider("Spessore tratto:", 1, 15, 3)
-            
+
             drawing_mode = "freedraw"
             stroke_color = "#000000"
-            
+
             if tipo_strumento == "✏️ Penna": drawing_mode = "freedraw"
-            elif tipo_strumento == "🧼 Gomma": 
+            elif tipo_strumento == "🧼 Gomma":
                 drawing_mode = "freedraw"
                 stroke_color = "#FFFFFF"
                 stroke_width = stroke_width + 5
@@ -249,69 +278,75 @@ elif modalita == "🎙️ Simulazione Esame":
                 drawing_mode=drawing_mode,
                 key="canvas_principale_univoco",
             )
-            
-            # BLOCCO PROTETTO: Nessun accesso diretto fuori dal try
-            if canvas_result is not None:
-                try:
-                    img_array = getattr(canvas_result, 'image_data', None)
-                    if img_array is not None:
-                        img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
-                        st.session_state.ultima_immagine_lavagna = img_rgba.convert('RGB')
-                except Exception:
-                    pass
 
-        st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
-        risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco")
+            st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
+            nota_aggiuntiva = st.text_input(
+                "Aggiungi una nota testuale opzionale al tuo disegno:",
+                key="testo_lavagna_univoco"
+            )
 
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
+            # Ricalcoliamo l'immagine QUI, nello stesso run del click, usando
+            # direttamente canvas_result (niente più dipendenza da session_state
+            # scritta in un try/except silenzioso).
             immagine_da_inviare = None
+            testo_per_ai = risposta_testuale
+
             if tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
-                immagine_da_inviare = st.session_state.get('ultima_immagine_lavagna', None)
-            
-            if risposta_testuale.strip() == "" and immagine_da_inviare is None:
+                immagine_da_inviare = prepara_immagine_lavagna(canvas_result)
+                testo_per_ai = nota_aggiuntiva
+
+            if testo_per_ai.strip() == "" and immagine_da_inviare is None:
                 st.warning("Inserisci una risposta testuale o fai un disegno sulla lavagna!")
             elif api_key:
                 with st.spinner("Il professore sta analizzando il tuo elaborato... ⏳"):
                     try:
-                        prompt_prof = f"""Sei un professore universitario di {materia_quiz}. 
+                        prompt_prof = f"""Sei un professore universitario di {materia_quiz}.
 Valuta lo studente di biotecnologie in modo preciso e incoraggiante.
 Domanda: "{st.session_state.domanda_ai['testo']}"
 
-L'utente ha risposto con del testo ("{risposta_testuale}") e/o con un'immagine allegata.
+L'utente ha risposto con del testo ("{testo_per_ai}") e/o con un'immagine allegata.
 Valuta l'accuratezza scientifica globale, decifrando eventuali formule matematiche, strutture chimiche o grafici disegnati a mano.
 
 REGOLA SUL VOTO: Un 100% si ottiene dimostrando di aver capito il meccanismo logico.
 
 La primissima riga DEVE contenere SOLO il voto da 0 a 100 seguito dal % (Es: 100%).
 Poi scrivi l'Analisi e un Trucco Mnemonico."""
-                        
+
                         risposta_finale = interroga_ai_con_fallback(prompt_prof, immagine_pill=immagine_da_inviare)
-                        
+
                         match = re.search(r'(\d{1,3})%', risposta_finale)
                         if match:
                             voto = int(match.group(1))
                             st.session_state.domanda_ai['punteggio'] = voto
                             if voto >= 90: st.balloons()
-                            
+
                         st.write(risposta_finale)
-                    except Exception as e: 
+
+                        # Utile per verificare visivamente cosa è stato davvero inviato all'AI
+                        if immagine_da_inviare is not None:
+                            with st.expander("🔍 Immagine effettivamente inviata all'AI"):
+                                st.image(immagine_da_inviare)
+                    except Exception as e:
                         st.error(f"Errore critico AI: {e}")
-                        
+            else:
+                st.error("Inserisci l'API Key nella barra laterale per usare questa funzione.")
+
 # ==========================================
 # MODULO 4: DASHBOARD MASTERY (Versione Integrale)
 # ==========================================
 elif modalita == "📈 Dashboard Mastery":
     st.title("📈 Dashboard a Espansione")
     st.write("Apri gli argomenti per visualizzare le domande. Clicca sui pulsanti per generare nuove domande al volo.")
-    
+
     materia_dash = st.selectbox("Analizza la materia:", list(st.session_state.database_domande.keys()) if st.session_state.database_domande else [])
-    
+
     if materia_dash:
         argomenti = st.session_state.database_domande[materia_dash]
         for nome_argomento, lista_domande in argomenti.items():
             with st.expander(f"📁 {nome_argomento} ({len(lista_domande)} domande)"):
-                
+
                 # --- PULSANTE MAGICO PER GENERARE ALTRE DOMANDE ---
                 if st.button(f"➕ Genera 1 nuova domanda su '{nome_argomento}'", key=f"btn_{nome_argomento}"):
                     if api_key:
@@ -319,18 +354,18 @@ elif modalita == "📈 Dashboard Mastery":
                             prompt_nuova = f"Sei un professore universitario. Genera UNA singola domanda d'esame complessa sulla materia '{materia_dash}', focalizzata in particolare sull'argomento '{nome_argomento}'. Restituisci SOLO il testo della domanda, senza numerazione o altro."
                             try:
                                 nuova_domanda = interroga_ai_con_fallback(prompt_nuova).strip()
-                                
+
                                 if nuova_domanda:
                                     st.session_state.database_domande[materia_dash][nome_argomento].append({"testo": nuova_domanda, "punteggio": 0})
                                     st.success("Domanda aggiunta con successo!")
-                                    st.rerun() 
+                                    st.rerun()
                             except Exception as e:
                                 st.error(f"Errore durante la generazione: {e}")
                     else:
                         st.error("Inserisci l'API Key nella barra laterale per usare questa funzione.")
-                
+
                 st.markdown("---")
-                
+
                 # Lista delle domande con le barre di progresso
                 for idx, d in enumerate(lista_domande):
                     col_testo, col_barra = st.columns([3, 1])
