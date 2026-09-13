@@ -4,6 +4,7 @@ import random
 import PyPDF2
 import re
 import json
+import io
 import numpy as np
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
@@ -47,11 +48,28 @@ def prepara_immagine_lavagna(canvas_result):
     diventa NERA (0,0,0) e il tratto nero della penna sparisce dentro di essa:
     il risultato è un'immagine praticamente illeggibile per l'AI.
     Questa funzione compone correttamente il disegno su uno sfondo bianco reale.
-    Restituisce None se il canvas è vuoto (nessun pixel disegnato).
+
+    Prova prima `image_bytes` (PNG grezzo, introdotto nelle versioni più
+    recenti della libreria) e solo se non disponibile ripiega su `image_data`
+    (array numpy RGBA). Restituisce None se il canvas è vuoto o i dati non
+    sono ancora arrivati dal frontend.
     """
     if canvas_result is None:
         return None
 
+    # --- Tentativo 1: image_bytes (PNG grezzo) ---
+    try:
+        png_bytes = canvas_result.image_bytes
+    except (RuntimeError, AttributeError):
+        png_bytes = None
+
+    if png_bytes:
+        try:
+            return Image.open(io.BytesIO(png_bytes)).convert('RGB')
+        except Exception:
+            pass  # se la decodifica fallisce, proviamo comunque la via classica
+
+    # --- Tentativo 2: image_data (array numpy RGBA) ---
     try:
         dati_immagine = canvas_result.image_data
     except RuntimeError:
@@ -306,6 +324,13 @@ elif modalita == "🎙️ Simulazione Esame":
                     if canvas_result.json_data is not None:
                         n_oggetti = len(canvas_result.json_data.get("objects", []))
                         st.write(f"Numero di oggetti disegnati (json_data): **{n_oggetti}**")
+
+                    try:
+                        pb = canvas_result.image_bytes
+                        st.write(f"`image_bytes`: **{len(pb) if pb else 0} byte**" if pb is not None else "`image_bytes` è **None**")
+                    except (RuntimeError, AttributeError) as e:
+                        st.write(f"`image_bytes` non disponibile: **{e}**")
+
                     try:
                         dati = canvas_result.image_data
                         if dati is None:
@@ -315,6 +340,13 @@ elif modalita == "🎙️ Simulazione Esame":
                             st.write(f"Valore massimo canale alpha: **{dati[:, :, 3].max() if dati.shape[-1] == 4 else 'N/A (no alpha)'}**")
                     except RuntimeError as e:
                         st.write(f"`image_data` ha sollevato RuntimeError: **{e}**")
+
+                    immagine_test = prepara_immagine_lavagna(canvas_result)
+                    if immagine_test is not None:
+                        st.success("✅ prepara_immagine_lavagna ha prodotto un'immagine!")
+                        st.image(immagine_test)
+                    else:
+                        st.error("❌ prepara_immagine_lavagna restituisce ancora None")
 
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
