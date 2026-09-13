@@ -213,7 +213,7 @@ elif modalita == "🎙️ Simulazione Esame":
             risposta_testuale = st.text_area("Scrivi qui la tua risposta:", height=150)
             
         elif tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
-            st.write("Usa il mouse o il pennino. **Attendi la spunta verde in basso prima di inviare!**")
+            st.write("Usa il mouse o il pennino per disegnare le tue formule o grafici.")
             
             # --- TOOLBOX DELLA LAVAGNA ---
             col_tool, col_size = st.columns([2, 1])
@@ -238,15 +238,11 @@ elif modalita == "🎙️ Simulazione Esame":
             elif tipo_strumento == "⭕ Cerchio": drawing_mode = "circle"
             elif tipo_strumento == "🟩 Rettangolo": drawing_mode = "rect"
 
-            # TRUCCO MAGICO: Creiamo un vero e proprio "foglio di carta" fisico in Python.
-            # Questo forza la lavagna a generare sempre i pixel, bypassando il bug!
-            foglio_di_carta = Image.new("RGB", (700, 350), (255, 255, 255))
-
             canvas_result = st_canvas(
                 fill_color="rgba(0, 0, 0, 0)",
                 stroke_width=stroke_width,
                 stroke_color=stroke_color,
-                background_image=foglio_di_carta, # Usiamo l'immagine fisica al posto del colore CSS
+                background_color="#FFFFFF",
                 width=700,
                 height=350,
                 drawing_mode=drawing_mode,
@@ -255,36 +251,26 @@ elif modalita == "🎙️ Simulazione Esame":
             
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco")
-            
-           # --- MOTORE DI CATTURA (Estrazione Diretta e Infallibile dei Pixel) ---
-            if 'disegno_corrente' not in st.session_state:
-                st.session_state.disegno_corrente = None
 
-            if canvas_result is not None:
-                try:
-                    # Ignoriamo completamente il file JSON che causava il blocco.
-                    # Puntiamo dritti alla matrice dei pixel dell'immagine.
-                    if canvas_result.image_data is not None:
+        # --- INVIO AL PROFESSORE (Estrazione ultra-pulita) ---
+        if st.button("Invia per la correzione"):
+            
+            immagine_da_inviare = None
+            
+            # Preleviamo l'immagine SOLO quando il pulsante viene premuto, evitando colli di bottiglia!
+            if tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
+                if canvas_result is not None and canvas_result.image_data is not None:
+                    try:
                         img_array = canvas_result.image_data
                         img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
-                        st.session_state.disegno_corrente = img_rgba.convert('RGB')
-                except Exception:
-                    pass
-
-            # --- IL SEMAFORO VERDE ---
-            immagine_da_inviare = st.session_state.get('disegno_corrente', None)
-            
-            if immagine_da_inviare is not None:
-                st.success("✅ Lavagna attiva e collegata! Il prof virtuale sta guardando. Disegna e premi Invia.")
-            else:
-                st.info("Inizializzazione lavagna... ⏳")
-                
-        # --- INVIO AL PROFESSORE ---
-        if st.button("Invia per la correzione"):
+                        immagine_da_inviare = img_rgba.convert('RGB')
+                    except Exception:
+                        pass
+                        
             if risposta_testuale.strip() == "" and immagine_da_inviare is None:
-                st.warning("Inserisci una risposta testuale o un disegno!")
+                st.warning("Inserisci una risposta testuale o fai un disegno sulla lavagna!")
             elif api_key:
-                with st.spinner("Il professore sta analizzando la tua risposta... ⏳"):
+                with st.spinner("Il professore sta analizzando il tuo elaborato... ⏳"):
                     try:
                         prompt_prof = f"""
                         Sei un professore universitario di {materia_quiz}. 
@@ -292,7 +278,8 @@ elif modalita == "🎙️ Simulazione Esame":
                         Domanda: "{st.session_state.domanda_ai['testo']}"
                         
                         L'utente ha risposto con del testo ("{risposta_testuale}") e/o con un'immagine allegata.
-                        Valuta l'accuratezza scientifica globale, compresi eventuali grafici o formule disegnate.
+                        Valuta l'accuratezza scientifica globale, decifrando eventuali formule matematiche, strutture chimiche o grafici disegnati a mano.
+                        (Se l'immagine allegata è completamente bianca/vuota e il testo è assente, fai notare che non ha fornito la risposta).
                         
                         REGOLA SUL VOTO: Un 100% si ottiene dimostrando di aver capito il meccanismo logico.
                         
@@ -308,7 +295,9 @@ elif modalita == "🎙️ Simulazione Esame":
                             if voto >= 90: st.balloons()
                             
                         st.write(risposta_finale)
-                    except Exception as e: st.error(f"Errore critico AI: {e}")
+                    except Exception as e: 
+                        st.error(f"Errore critico AI: {e}")
+                        
 # ==========================================
 # MODULO 4: DASHBOARD MASTERY (Versione Integrale)
 # ==========================================
