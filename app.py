@@ -5,13 +5,35 @@ import PyPDF2
 import re
 import json
 
-# --- COSTANTI E CONFIGURAZIONI ---
-NOME_MODELLO = 'gemini-3.5-flash-lite'
+# --- COSTANTI E CONFIGURAZIONI (La Cascata di Salvataggio) ---
+# L'app proverà questi modelli in ordine dal primo all'ultimo
+LISTA_MODELLI = [
+    'gemini-3.6-flash',        # Prima scelta (potente ma con limiti stretti)
+    'gemini-3.5-flash',        # Seconda scelta
+    'gemini-3.5-flash-lite',   # Terza scelta (molto permissivo)
+    'gemini-2.5-flash'         # L'ancora di salvezza finale
+]
 
 st.set_page_config(page_title="Nexus Study App", page_icon="🧬", layout="wide")
 
 if 'database_domande' not in st.session_state:
     st.session_state.database_domande = {}
+
+# --- FUNZIONE MOTORE IA CON FALLBACK ---
+def interroga_ai_con_fallback(prompt_testo):
+    """Prova i modelli in sequenza finché uno non risponde."""
+    for nome_modello in LISTA_MODELLI:
+        try:
+            modello = genai.GenerativeModel(nome_modello)
+            risposta = modello.generate_content(prompt_testo)
+            return risposta.text # Se ha successo, esce dalla funzione e restituisce il testo
+        except Exception as e:
+            # Se c'è un errore (es. Quota superata 429), avvisa l'utente e passa al prossimo
+            st.toast(f"⚠️ {nome_modello} occupato. Provo via secondaria...", icon="🔄")
+            continue
+    
+    # Se il ciclo finisce e tutti i modelli hanno fallito
+    raise Exception("Tutti i modelli AI hanno esaurito la quota o sono bloccati. Riprova più tardi.")
 
 # --- BARRA LATERALE E GESTIONE PROFILO ---
 st.sidebar.title("🧬 Nexus Ecosistema")
@@ -46,11 +68,9 @@ st.sidebar.markdown("---")
 modalita = st.sidebar.radio("Navigazione:", ["🏠 Home & Istruzioni", "⚙️ Aggiungi PDF", "🎙️ Simulazione Esame", "📈 Dashboard Mastery"])
 
 # ==========================================
-# MODULO 1: HOME & ISTRUZIONI (Completamente Rinnovato)
+# MODULO 1: HOME & ISTRUZIONI
 # ==========================================
 if modalita == "🏠 Home & Istruzioni":
-    
-    # SE IL DATABASE E' VUOTO (Utente Nuovo) -> Mostra il Tutorial completo
     if not st.session_state.database_domande:
         st.title("Benvenuto in Nexus Study 🧬")
         st.write("La piattaforma dinamica per preparare i tuoi esami universitari tramite *Active Recall* e Intelligenza Artificiale.")
@@ -59,25 +79,20 @@ if modalita == "🏠 Home & Istruzioni":
         st.subheader("🚀 Guida Rapida in 3 Step")
         
         col1, col2, col3 = st.columns(3)
-        
         with col1:
-            st.info("**1. Accendi il Motore**\n\nPer funzionare, l'app ha bisogno di un 'cervello'. Vai su [Google AI Studio](https://aistudio.google.com/app/apikey), accedi con il tuo account Google e clicca su **Create API Key**. Copia quella stringa segreta e incollala nel box qui a sinistra nella barra laterale. È un'operazione gratuita e sicura.")
-            
+            st.info("**1. Accendi il Motore**\n\nOttieni una API Key da [Google AI Studio](https://aistudio.google.com/app/apikey) e incollala qui a sinistra.")
         with col2:
-            st.info("**2. Fornisci il Materiale**\n\nVai nella sezione **⚙️ Aggiungi PDF**. Crea una materia (es. 'Biologia Molecolare' o 'Chimica Organica') e carica un capitolo delle tue dispense. L'AI lo leggerà in pochi secondi, estrarrà gli argomenti principali e genererà domande da esame specifiche, pronte per essere affrontate.")
-            
+            st.info("**2. Fornisci il Materiale**\n\nVai su **⚙️ Aggiungi PDF**, crea una materia e carica le dispense. L'AI genererà domande specifiche.")
         with col3:
-            st.error("**3. SALVA IL TUO PROFILO!**\n\nQuesta app rispetta la tua privacy al 100%: **nessun dato viene salvato sul server**. Quando hai finito di studiare, devi cliccare su **⬇️ Scarica il mio Profilo** a sinistra. Il giorno dopo, ricaricherai quel file per ritrovare tutte le tue domande e i tuoi voti.")
+            st.error("**3. SALVA IL TUO PROFILO!**\n\nNessun dato viene salvato sul server. Scarica il Profilo a sinistra a fine sessione per non perdere i voti.")
 
         st.markdown("---")
-        st.subheader("💡 Consigli per il '30 e Lode'")
+        st.subheader("💡 Consigli per l'Esame")
         st.markdown("""
-        * **Non impazzire con le formule:** Durante la **🎙️ Simulazione Esame**, il professore virtuale sa che sei al computer. Se ti chiede una struttura molecolare o un'equazione complessa, descrivila a parole o spiegane il meccanismo logico. Prenderai 100% ugualmente.
-        * **Carica a blocchi:** Non inserire PDF da 500 pagine tutti insieme. Carica un capitolo o una tematica alla volta (es. "Cinetica Enzimatica"). Avrai domande molto più precise.
-        * **Usa la Dashboard:** Vai nella **📈 Dashboard Mastery** per vedere dove zoppichi. Lì dentro troverai anche un pulsante magico per farti generare nuove domande al volo sugli argomenti in cui hai preso un voto basso.
+        * **Non impazzire con le formule:** Descrivi a parole le strutture, il prof virtuale capirà.
+        * **Carica a blocchi:** Inserisci PDF divisi per capitoli per avere domande più precise.
+        * **Resistenza ai Crash:** Il sistema ha un fallback automatico. Se un modello esaurisce i tentativi, passerà a uno di riserva silenziosamente.
         """)
-
-    # SE IL DATABASE HA DATI -> Mostra le Statistiche (e nasconde il tutorial in un menu a tendina)
     else:
         st.title("🏠 Il tuo Ecosistema di Studio")
         
@@ -99,12 +114,6 @@ if modalita == "🏠 Home & Istruzioni":
                 tags = " | ".join([f"*{arg}*" for arg in argomenti.keys()])
                 st.write(tags)
                 st.markdown("---")
-        
-        # Tutorial collassato per chi lo volesse rileggere
-        with st.expander("📖 Rileggi la Guida all'Uso e i Consigli"):
-            st.write("1. **API Key:** Ottienila gratis da [Google AI Studio](https://aistudio.google.com/app/apikey) e incollala a sinistra.")
-            st.write("2. **Privacy:** Ricordati sempre di scaricare il tuo profilo (file JSON) a fine sessione per non perdere i progressi!")
-            st.write("3. **Simulazione:** Descrivi i processi e le formule a parole, l'AI capirà il ragionamento.")
 
 # ==========================================
 # MODULO 2: LETTURA PDF
@@ -127,29 +136,26 @@ elif modalita == "⚙️ Aggiungi PDF":
         if not api_key or not materia_target or not file_pdf:
             st.error("Assicurati di aver inserito chiave, materia e file.")
         else:
-            with st.spinner("Estrazione argomenti e generazione domande... ⏳"):
+            with st.spinner("Lettura dispensa e generazione domande in corso... ⏳"):
                 try:
                     lettore = PyPDF2.PdfReader(file_pdf)
                     testo_estratto = "".join([pagina.extract_text() for pagina in lettore.pages])
                     
-                    modello = genai.GenerativeModel(NOME_MODELLO)
                     prompt = f"""
-                    Agisci come professore di {materia_target}. Leggi queste dispense: "{testo_estratto}"
-                    
-                    1. Identifica i macro-argomenti.
-                    2. Per OGNI macro-argomento, genera da 3 a 5 domande per un esame {tipo_esame}.
-                    
-                    DEVI RISPONDERE ESATTAMENTE CON QUESTO FORMATO:
+                    Agisci come professore di {materia_target}. Leggi: "{testo_estratto}"
+                    Identifica i macro-argomenti e genera 3-5 domande per un esame {tipo_esame}.
+                    FORMATO ESATTO RICHIESTO:
                     ### ARGOMENTO: [Nome]
                     - [Domanda 1]
                     - [Domanda 2]
                     """
-                    risposta_ai = modello.generate_content(prompt)
+                    # USIAMO LA NUOVA FUNZIONE CON FALLBACK
+                    testo_risposta_ai = interroga_ai_con_fallback(prompt)
                     
                     if materia_target not in st.session_state.database_domande:
                         st.session_state.database_domande[materia_target] = {}
                     
-                    righe = risposta_ai.text.strip().split('\n')
+                    righe = testo_risposta_ai.strip().split('\n')
                     argomento_corrente = "Varie"
                     totale_domande = 0
                     
@@ -166,7 +172,7 @@ elif modalita == "⚙️ Aggiungi PDF":
                     
                     st.success(f"✅ Generate {totale_domande} domande. Ricordati di SCARICARE IL PROFILO prima di uscire!")
                 except Exception as e:
-                    st.error(f"Errore: {e}")
+                    st.error(f"Errore critico: {e}")
 
 # ==========================================
 # MODULO 3: SIMULAZIONE
@@ -198,30 +204,30 @@ elif modalita == "🎙️ Simulazione Esame":
             if risposta_utente.strip() == "":
                 st.warning("Scrivi una risposta!")
             elif api_key:
-                with st.spinner("Valutazione... ⏳"):
+                with st.spinner("Valutazione in corso... ⏳"):
                     try:
-                        modello = genai.GenerativeModel(NOME_MODELLO)
                         prompt = f"""
                         Agisci come professore universitario di {materia_quiz}. 
                         Domanda: "{st.session_state.domanda_ai['testo']}"
-                        Risposta: "{risposta_utente}"
+                        Risposta studente: "{risposta_utente}"
                         
-                        REGOLA SULLE FORMULE: Non penalizzare l'assenza di formule matematiche scritte, accetta descrizioni discorsive.
-                        REGOLA SUL VOTO: Un 100% si ottiene capendo la logica.
+                        REGOLA FORMULE: Non penalizzare l'assenza di formule matematiche scritte, accetta descrizioni.
+                        REGOLA VOTO: 100% se si è capita la logica.
                         
                         La primissima riga DEVE contenere SOLO un numero da 0 a 100 seguito dal % (Es: 100%).
                         Poi fornisci Analisi e Trucco Mnemonico.
                         """
-                        risposta_ai = modello.generate_content(prompt)
+                        # USIAMO LA NUOVA FUNZIONE CON FALLBACK
+                        testo_risposta_ai = interroga_ai_con_fallback(prompt)
                         
-                        match = re.search(r'(\d{1,3})%', risposta_ai.text)
+                        match = re.search(r'(\d{1,3})%', testo_risposta_ai)
                         if match:
                             voto = int(match.group(1))
                             st.session_state.domanda_ai['punteggio'] = voto
                             if voto >= 90: st.balloons()
                             
-                        st.write(risposta_ai.text)
-                    except Exception as e: st.error(f"Errore AI: {e}")
+                        st.write(testo_risposta_ai)
+                    except Exception as e: st.error(f"Errore critico: {e}")
 
 # ==========================================
 # MODULO 4: DASHBOARD MASTERY
@@ -239,16 +245,16 @@ elif modalita == "📈 Dashboard Mastery":
                 if st.button(f"➕ Genera 1 nuova domanda", key=f"btn_{nome_argomento}"):
                     if api_key:
                         with st.spinner("Creazione in corso... ⏳"):
-                            modello = genai.GenerativeModel(NOME_MODELLO)
                             prompt_nuova = f"Genera UNA singola domanda complessa su '{materia_dash}', focalizzata su '{nome_argomento}'. Restituisci SOLO il testo della domanda."
                             try:
-                                risp = modello.generate_content(prompt_nuova)
-                                nuova_domanda = risp.text.strip()
+                                # USIAMO LA NUOVA FUNZIONE CON FALLBACK
+                                nuova_domanda = interroga_ai_con_fallback(prompt_nuova).strip()
+                                
                                 if nuova_domanda:
                                     st.session_state.database_domande[materia_dash][nome_argomento].append({"testo": nuova_domanda, "punteggio": 0})
                                     st.success("Domanda aggiunta con successo!")
                                     st.rerun()
-                            except Exception as e: st.error(f"Errore: {e}")
+                            except Exception as e: st.error(f"Errore critico: {e}")
                     else:
                         st.error("Inserisci l'API Key.")
                 
