@@ -246,28 +246,25 @@ elif modalita == "🎙️ Simulazione Esame":
                 width=800,
                 height=500,
                 drawing_mode=drawing_mode,
-                key="canvas_principale_univoco", # Chiave sicura
+                key="canvas_principale_univoco", 
             )
             
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
-            risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco") # Chiave sicura
+            risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco")
             
-            # --- SALVATAGGIO IN VESCICOLA DI MEMORIA (Anti-Vuoto) ---
-            if canvas_result is not None and canvas_result.json_data is not None:
-                if len(canvas_result.json_data.get("objects", [])) > 0:
-                    try:
-                        immagine_grezza = canvas_result.image_data
-                        if immagine_grezza is not None:
-                            immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
-                            st.session_state.disegno_corrente = immagine_convertita.convert('RGB')
-                    except RuntimeError:
-                        pass 
-                else:
-                    st.session_state.disegno_corrente = None
-
-            # Recuperiamo il disegno sano e salvo
-            immagine_da_inviare = st.session_state.get('disegno_corrente', None)
-
+            # --- ESTRAZIONE A PROVA DI BOMBA (Bypassa il bug di Streamlit) ---
+            immagine_da_inviare = None
+            if canvas_result is not None and canvas_result.image_data is not None:
+                # 1. Preleviamo SEMPRE la matrice dei pixel, a prescindere dai ricaricamenti
+                immagine_grezza = canvas_result.image_data
+                immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
+                immagine_da_inviare = immagine_convertita.convert('RGB')
+                
+                # 2. Svuotiamo la variabile SOLO SE siamo matematicamente certi che il foglio sia immacolato
+                if canvas_result.json_data is not None and "objects" in canvas_result.json_data:
+                    if len(canvas_result.json_data["objects"]) == 0:
+                        immagine_da_inviare = None
+                        
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
             if risposta_testuale.strip() == "" and immagine_da_inviare is None:
