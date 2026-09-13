@@ -252,19 +252,29 @@ elif modalita == "🎙️ Simulazione Esame":
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco")
             
-            # --- ESTRAZIONE A PROVA DI BOMBA (Bypassa il bug di Streamlit) ---
-            immagine_da_inviare = None
-            if canvas_result is not None and canvas_result.image_data is not None:
-                # 1. Preleviamo SEMPRE la matrice dei pixel, a prescindere dai ricaricamenti
-                immagine_grezza = canvas_result.image_data
-                immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
-                immagine_da_inviare = immagine_convertita.convert('RGB')
-                
-                # 2. Svuotiamo la variabile SOLO SE siamo matematicamente certi che il foglio sia immacolato
-                if canvas_result.json_data is not None and "objects" in canvas_result.json_data:
-                    if len(canvas_result.json_data["objects"]) == 0:
-                        immagine_da_inviare = None
-                        
+           # --- SALVATAGGIO IN VESCICOLA DI MEMORIA (LA VERA CURA) ---
+            if canvas_result is not None:
+                try:
+                    # Tutto il controllo pericoloso DEVE stare qui dentro!
+                    # Se il browser è in ritardo, la riga qui sotto fallisce e scatta subito l'except.
+                    immagine_grezza = canvas_result.image_data 
+                    
+                    if immagine_grezza is not None:
+                        # Controlliamo se c'è effettivamente dell'inchiostro (oggetti) sulla lavagna
+                        if canvas_result.json_data is not None and "objects" in canvas_result.json_data:
+                            if len(canvas_result.json_data["objects"]) > 0:
+                                immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
+                                st.session_state.disegno_corrente = immagine_convertita.convert('RGB')
+                            else:
+                                st.session_state.disegno_corrente = None # Svuota la memoria se cancella tutto
+                except RuntimeError:
+                    # Se il browser va in panico durante il ricaricamento, noi lo ignoriamo.
+                    # L'immagine salvata prima del clic rimarrà intatta nella memoria!
+                    pass
+
+            # Recuperiamo il disegno sano e salvo
+            immagine_da_inviare = st.session_state.get('disegno_corrente', None)
+            
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
             if risposta_testuale.strip() == "" and immagine_da_inviare is None:
