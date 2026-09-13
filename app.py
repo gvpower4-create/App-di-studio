@@ -238,11 +238,14 @@ elif modalita == "🎙️ Simulazione Esame":
             elif tipo_strumento == "⭕ Cerchio": drawing_mode = "circle"
             elif tipo_strumento == "🟩 Rettangolo": drawing_mode = "rect"
 
+            # TRUCCO MAGICO: Creiamo un "foglio di carta" fisico in Python.
+            foglio_di_carta = Image.new("RGB", (700, 350), (255, 255, 255))
+
             canvas_result = st_canvas(
                 fill_color="rgba(0, 0, 0, 0)",
                 stroke_width=stroke_width,
                 stroke_color=stroke_color,
-                background_color="#FFFFFF",
+                background_image=foglio_di_carta, # Usa l'immagine fisica
                 width=700,
                 height=350,
                 drawing_mode=drawing_mode,
@@ -252,51 +255,53 @@ elif modalita == "🎙️ Simulazione Esame":
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco")
 
-        # --- INVIO AL PROFESSORE (Estrazione ultra-pulita) ---
-        if st.button("Invia per la correzione"):
-            
-            immagine_da_inviare = None
-            
-            # Preleviamo l'immagine SOLO quando il pulsante viene premuto, evitando colli di bottiglia!
-            if tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
-                if canvas_result is not None and canvas_result.image_data is not None:
-                    try:
-                        img_array = canvas_result.image_data
+            # --- SALVATAGGIO IN MEMORIA PROTETTO (Nessun Crash Possibile) ---
+            if canvas_result is not None:
+                try:
+                    # IL CONTROLLO PERICOLOSO È RIGOROSAMENTE DENTRO IL TRY
+                    img_array = canvas_result.image_data 
+                    if img_array is not None:
                         img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
-                        immagine_da_inviare = img_rgba.convert('RGB')
-                    except Exception:
-                        pass
-                        
-            if risposta_testuale.strip() == "" and immagine_da_inviare is None:
-                st.warning("Inserisci una risposta testuale o fai un disegno sulla lavagna!")
-            elif api_key:
-                with st.spinner("Il professore sta analizzando il tuo elaborato... ⏳"):
-                    try:
-                        prompt_prof = f"""
-                        Sei un professore universitario di {materia_quiz}. 
-                        Valuta lo studente di biotecnologie in modo preciso e incoraggiante.
-                        Domanda: "{st.session_state.domanda_ai['testo']}"
-                        
-                        L'utente ha risposto con del testo ("{risposta_testuale}") e/o con un'immagine allegata.
-                        Valuta l'accuratezza scientifica globale, decifrando eventuali formule matematiche, strutture chimiche o grafici disegnati a mano.
-                        (Se l'immagine allegata è completamente bianca/vuota e il testo è assente, fai notare che non ha fornito la risposta).
-                        
-                        REGOLA SUL VOTO: Un 100% si ottiene dimostrando di aver capito il meccanismo logico.
-                        
-                        La primissima riga DEVE contenere SOLO il voto da 0 a 100 seguito dal % (Es: 100%).
-                        Poi scrivi l'Analisi e un Trucco Mnemonico.
-                        """
-                        risposta_finale = interroga_ai_con_fallback(prompt_prof, immagine_pill=immagine_da_inviare)
-                        
-                        match = re.search(r'(\d{1,3})%', risposta_finale)
-                        if match:
-                            voto = int(match.group(1))
-                            st.session_state.domanda_ai['punteggio'] = voto
-                            if voto >= 90: st.balloons()
-                            
-                        st.write(risposta_finale)
-                    except Exception as e: 
-                        st.error(f"Errore critico AI: {e}")
+                        st.session_state.disegno_corrente = img_rgba.convert('RGB')
+                except RuntimeError:
+                    # Se il browser è in ritardo, la bomba esplode qui dentro, insonorizzata.
+                    pass
+
+        # --- INVIO AL PROFESSORE ---
+if st.button("Invia per la correzione"):
+    
+    immagine_da_inviare = None
+    
+    # Recuperiamo l'immagine salvata in memoria un istante prima del clic
+    if tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
+        immagine_da_inviare = st.session_state.get('disegno_corrente', None)
+        
+    if risposta_testuale.strip() == "" and immagine_da_inviare is None:
+        st.warning("Inserisci una risposta testuale o un disegno!")
+    elif api_key:
+        with st.spinner("Il professore sta analizzando la tua risposta... ⏳"):
+            try:
+                prompt_prof = f"""Sei un professore universitario di {materia_quiz}.
+Valuta lo studente di biotecnologie in modo preciso e incoraggiante.
+Domanda: "{st.session_state.domanda_ai['testo']}"
+
+L'utente ha risposto con del testo ("{risposta_testuale}") e/o con un'immagine allegata.
+Valuta l'accuratezza scientifica globale, compresi eventuali grafici o formule disegnate.
+
+REGOLA SUL VOTO: Un 100% si ottiene dimostrando di aver capito il meccanismo logico.
+
+La primissima riga DEVE contenere SOLO il voto da 0 a 100 seguito dal % (Es: 100%).
+Poi scrivi l'Analisi e un Trucco Mnemonico.""" 
+                risposta_finale = interroga_ai_con_fallback(prompt_prof, immagine_pill=immagine_da_inviare)
+                
+                match = re.search(r'(\d{1,3})%', risposta_finale)
+                if match:
+                    voto = int(match.group(1))
+                    st.session_state.domanda_ai['punteggio'] = voto
+                    if voto >= 90: st.balloons()
+                    
+                st.write(risposta_finale)
+            except Exception as e: st.error(f"Errore critico AI: {e}")
                         
 # ==========================================
 # MODULO 4: DASHBOARD MASTERY (Versione Integrale)
