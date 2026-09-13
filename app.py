@@ -258,7 +258,7 @@ elif modalita == "🎙️ Simulazione Esame":
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:")
             
-           st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
+            st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:")
             
             # --- PROTEZIONE ANTI-CRASH DEFINITIVA ---
