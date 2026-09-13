@@ -226,57 +226,45 @@ elif modalita == "🎙️ Simulazione Esame":
             with col_size:
                 stroke_width = st.slider("Spessore tratto:", 1, 15, 3)
             
-            # Logica di selezione dello strumento
             drawing_mode = "freedraw"
-            stroke_color = "#000000" # Nero di default
+            stroke_color = "#000000"
             
-            if tipo_strumento == "✏️ Penna":
+            if tipo_strumento == "✏️ Penna": drawing_mode = "freedraw"
+            elif tipo_strumento == "🧼 Gomma": 
                 drawing_mode = "freedraw"
-            elif tipo_strumento == "🧼 Gomma":
-                drawing_mode = "freedraw"
-                stroke_color = "#FFFFFF" # Il trucco della gomma: scrive di bianco!
-                stroke_width = stroke_width + 5 # La gomma è fisiologicamente più spessa
-            elif tipo_strumento == "📏 Linea":
-                drawing_mode = "line"
-            elif tipo_strumento == "⭕ Cerchio":
-                drawing_mode = "circle"
-            elif tipo_strumento == "🟩 Rettangolo":
-                drawing_mode = "rect"
+                stroke_color = "#FFFFFF"
+                stroke_width = stroke_width + 5
+            elif tipo_strumento == "📏 Linea": drawing_mode = "line"
+            elif tipo_strumento == "⭕ Cerchio": drawing_mode = "circle"
+            elif tipo_strumento == "🟩 Rettangolo": drawing_mode = "rect"
 
-            # Creazione effettiva della lavagna potenziata
             canvas_result = st_canvas(
-                fill_color="rgba(0, 0, 0, 0)", # Sfondo trasparente dentro le forme geometriche
+                fill_color="rgba(0, 0, 0, 0)",
                 stroke_width=stroke_width,
                 stroke_color=stroke_color,
                 background_color="#FFFFFF",
-                width=800, # Lavagna molto più larga
-                height=500, # Lavagna più alta
+                width=800,
+                height=500,
                 drawing_mode=drawing_mode,
-                key="canvas",
+                key="canvas_principale", # Aggiunta chiave per evitare conflitti!
             )
             
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
-            risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:")
-            
-            st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
-            risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:")
+            # ECCO LA CORREZIONE: Abbiamo aggiunto key="testo_lavagna"
+            risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna")
             
             # --- PROTEZIONE ANTI-CRASH DEFINITIVA ---
             immagine_da_inviare = None
             if canvas_result is not None:
                 try:
-                    # Proviamo ad accedere ai dati dell'immagine
                     immagine_grezza = canvas_result.image_data
-                    
-                    # Se non è vuota, la convertiamo per l'AI
                     if immagine_grezza is not None:
                         immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
                         immagine_da_inviare = immagine_convertita.convert('RGB')
-                        
                 except RuntimeError:
-                    # Se il browser non ha ancora inviato i dati e la libreria lancia l'errore, 
-                    # lo catturiamo e lo ignoriamo silenziosamente senza far crashare l'app.
                     pass
+
+        # --- INVIO AL PROFESSORE ---
 
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
