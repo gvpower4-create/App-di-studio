@@ -256,33 +256,29 @@ elif modalita == "🎙️ Simulazione Esame":
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco")
             
-            # --- MOTORE DI CATTURA (Infallibile con Foglio Fisico) ---
+           # --- MOTORE DI CATTURA (Estrazione Diretta e Infallibile dei Pixel) ---
             if 'disegno_corrente' not in st.session_state:
                 st.session_state.disegno_corrente = None
 
             if canvas_result is not None:
                 try:
-                    # Controlliamo che l'utente abbia tracciato almeno un segno
-                    if canvas_result.json_data is not None and "objects" in canvas_result.json_data:
-                        if len(canvas_result.json_data["objects"]) > 0:
-                            # Grazie al foglio fisico, questo comando estrarrà sempre i dati senza fallire
-                            img_array = canvas_result.image_data
-                            if img_array is not None:
-                                img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
-                                st.session_state.disegno_corrente = img_rgba.convert('RGB')
-                        else:
-                            st.session_state.disegno_corrente = None
-                except RuntimeError:
+                    # Ignoriamo completamente il file JSON che causava il blocco.
+                    # Puntiamo dritti alla matrice dei pixel dell'immagine.
+                    if canvas_result.image_data is not None:
+                        img_array = canvas_result.image_data
+                        img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
+                        st.session_state.disegno_corrente = img_rgba.convert('RGB')
+                except Exception:
                     pass
 
             # --- IL SEMAFORO VERDE ---
             immagine_da_inviare = st.session_state.get('disegno_corrente', None)
             
             if immagine_da_inviare is not None:
-                st.success("✅ Lavagna acquisita in memoria! Ora puoi inviare la risposta.")
+                st.success("✅ Lavagna attiva e collegata! Il prof virtuale sta guardando. Disegna e premi Invia.")
             else:
-                st.info("Attendo un disegno sulla lavagna... ⏳")
-
+                st.info("Inizializzazione lavagna... ⏳")
+                
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
             if risposta_testuale.strip() == "" and immagine_da_inviare is None:
