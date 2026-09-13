@@ -65,7 +65,9 @@ def prepara_immagine_lavagna(canvas_result):
 
     if png_bytes:
         try:
-            return Image.open(io.BytesIO(png_bytes)).convert('RGB')
+            disegno_png = Image.open(io.BytesIO(png_bytes)).convert('RGBA')
+            sfondo_bianco_png = Image.new('RGBA', disegno_png.size, (255, 255, 255, 255))
+            return Image.alpha_composite(sfondo_bianco_png, disegno_png).convert('RGB')
         except Exception:
             pass  # se la decodifica fallisce, proviamo comunque la via classica
 
