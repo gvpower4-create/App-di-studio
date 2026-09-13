@@ -252,24 +252,31 @@ elif modalita == "🎙️ Simulazione Esame":
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco")
             
-            # --- MOTORE DI CATTURA (Leggero e con Feedback) ---
+            # --- MOTORE DI CATTURA (Infallibile) ---
             if 'disegno_corrente' not in st.session_state:
                 st.session_state.disegno_corrente = None
 
-            if canvas_result is not None:
-                try:
-                    # Controlliamo che il JSON non sia vuoto
-                    if canvas_result.json_data is not None and "objects" in canvas_result.json_data:
-                        if len(canvas_result.json_data["objects"]) > 0:
-                            img_array = canvas_result.image_data
-                            if img_array is not None:
-                                img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
-                                st.session_state.disegno_corrente = img_rgba.convert('RGB')
-                        else:
+            if canvas_result is not None and canvas_result.image_data is not None:
+                # 1. Preleviamo i pixel istantaneamente a prescindere da tutto
+                img_array = canvas_result.image_data
+                img_rgba = Image.fromarray(img_array.astype('uint8'), 'RGBA')
+                st.session_state.disegno_corrente = img_rgba.convert('RGB')
+                
+                # 2. Annulliamo l'immagine SOLO se abbiamo la prova certa che la lavagna è vuota
+                if canvas_result.json_data:
+                    dati_json = canvas_result.json_data
+                    
+                    # Se la libreria usa il vecchio formato a stringa, la decodifichiamo
+                    if isinstance(dati_json, str):
+                        try:
+                            dati_json = json.loads(dati_json)
+                        except:
+                            dati_json = {}
+                            
+                    # Se è un dizionario e ci sono 0 oggetti, allora l'utente non ha disegnato nulla
+                    if isinstance(dati_json, dict) and "objects" in dati_json:
+                        if len(dati_json["objects"]) == 0:
                             st.session_state.disegno_corrente = None
-                except Exception:
-                    # Cattura qualsiasi ritardo di rete senza far crashare nulla
-                    pass
 
             # --- IL SEMAFORO VERDE ---
             immagine_da_inviare = st.session_state.get('disegno_corrente', None)
@@ -278,7 +285,7 @@ elif modalita == "🎙️ Simulazione Esame":
                 st.success("✅ Lavagna acquisita in memoria! Ora puoi inviare la risposta.")
             else:
                 st.info("Attendo un disegno sulla lavagna... ⏳")
-
+                
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
             if risposta_testuale.strip() == "" and immagine_da_inviare is None:
