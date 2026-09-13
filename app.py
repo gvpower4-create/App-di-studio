@@ -179,7 +179,7 @@ elif modalita == "⚙️ Aggiungi PDF":
                     st.success(f"✅ Generate {totale_domande} domande. Ricordati di SCARICARE IL PROFILO prima di uscire!")
                 except Exception as e:
                     st.error(f"Errore critico: {e}")
-                    # ==========================================
+# ==========================================
 # MODULO 3: SIMULAZIONE (IL NUOVO MOTORE MULTIMODALE)
 # ==========================================
 elif modalita == "🎙️ Simulazione Esame":
@@ -188,7 +188,7 @@ elif modalita == "🎙️ Simulazione Esame":
     materia_quiz = st.selectbox("Scegli la materia:", list(st.session_state.database_domande.keys()) if st.session_state.database_domande else [])
     
     if not materia_quiz:
-        st.warning("Aggiungi prima una materia o carica il tuo profilo dalla barra laterale.")
+        st.warning("Aggiungi prima una materia o carica il tuo profilo.")
     else:
         argomenti_disponibili = list(st.session_state.database_domande[materia_quiz].keys())
         argomento_scelto = st.selectbox("Focus sull'argomento:", ["Mix Casuale (Tutto)"] + argomenti_disponibili)
@@ -246,33 +246,26 @@ elif modalita == "🎙️ Simulazione Esame":
                 width=800,
                 height=500,
                 drawing_mode=drawing_mode,
-                key="canvas_principale", # Aggiunta chiave per evitare conflitti!
+                key="canvas_principale_univoco", # Chiave sicura
             )
             
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
-            # ECCO LA CORREZIONE: Abbiamo aggiunto key="testo_lavagna"
-            risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna")
+            risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna_univoco") # Chiave sicura
             
-            st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
-            risposta_testuale = st.text_input("Aggiungi una nota testuale opzionale al tuo disegno:", key="testo_lavagna")
-            
-            # --- SALVATAGGIO IN VESCICOLA DI MEMORIA (Anti-Crash e Anti-Vuoto) ---
-            # Controlliamo se ci sono dati e se l'utente ha tracciato almeno un tratto (objects > 0)
+            # --- SALVATAGGIO IN VESCICOLA DI MEMORIA (Anti-Vuoto) ---
             if canvas_result is not None and canvas_result.json_data is not None:
                 if len(canvas_result.json_data.get("objects", [])) > 0:
                     try:
                         immagine_grezza = canvas_result.image_data
                         if immagine_grezza is not None:
                             immagine_convertita = Image.fromarray(immagine_grezza.astype('uint8'), 'RGBA')
-                            # Salviamo l'immagine al sicuro nella sessione
                             st.session_state.disegno_corrente = immagine_convertita.convert('RGB')
                     except RuntimeError:
-                        pass # Ignoriamo il ritardo del browser
+                        pass 
                 else:
-                    # Se l'utente usa la gomma e cancella tutto, svuotiamo la memoria
                     st.session_state.disegno_corrente = None
 
-            # Recuperiamo il disegno sano e salvo dalla cassaforte
+            # Recuperiamo il disegno sano e salvo
             immagine_da_inviare = st.session_state.get('disegno_corrente', None)
 
         # --- INVIO AL PROFESSORE ---
@@ -284,18 +277,17 @@ elif modalita == "🎙️ Simulazione Esame":
                     try:
                         prompt_prof = f"""
                         Sei un professore universitario di {materia_quiz}. 
-                        Stai valutando l'interrogazione di uno studente universitario di biotecnologie. Devi essere preciso e spietato dal punto di vista scientifico, ma incoraggiante.
+                        Valuta lo studente di biotecnologie in modo preciso e incoraggiante.
                         Domanda: "{st.session_state.domanda_ai['testo']}"
                         
-                        L'utente ha risposto con del testo ("{risposta_testuale}") e/o con un'immagine allegata (che potrebbe contenere grafici, formule o schemi).
-                        Valuta l'accuratezza scientifica globale.
+                        L'utente ha risposto con del testo ("{risposta_testuale}") e/o con un'immagine allegata.
+                        Valuta l'accuratezza scientifica globale, compresi eventuali grafici o formule disegnate.
                         
-                        REGOLA SUL VOTO: Un 100% (30 e lode) si ottiene dimostrando di aver capito il meccanismo.
+                        REGOLA SUL VOTO: Un 100% si ottiene dimostrando di aver capito il meccanismo logico.
                         
                         La primissima riga DEVE contenere SOLO il voto da 0 a 100 seguito dal % (Es: 100%).
-                        Poi scrivi l'Analisi dettagliata e un Trucco Mnemonico.
+                        Poi scrivi l'Analisi e un Trucco Mnemonico.
                         """
-                        # Passiamo sia testo che immagine al motore a cascata
                         risposta_finale = interroga_ai_con_fallback(prompt_prof, immagine_pill=immagine_da_inviare)
                         
                         match = re.search(r'(\d{1,3})%', risposta_finale)
@@ -306,7 +298,6 @@ elif modalita == "🎙️ Simulazione Esame":
                             
                         st.write(risposta_finale)
                     except Exception as e: st.error(f"Errore critico AI: {e}")
-
 # ==========================================
 # MODULO 4: DASHBOARD MASTERY (Versione Integrale)
 # ==========================================
