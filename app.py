@@ -211,6 +211,7 @@ elif modalita == "🎙️ Simulazione Esame":
         
         if tipo_risposta == "⌨️ Testo Classico":
             risposta_testuale = st.text_area("Scrivi qui la tua risposta:", height=150)
+            
             elif tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
             st.write("Usa il mouse o il pennino. **Attendi che compaia la spunta verde in basso prima di inviare!**")
             
