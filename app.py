@@ -23,6 +23,69 @@ LISTA_MODELLI = [
 
 st.set_page_config(page_title="Nexus Study App", page_icon="🧬", layout="wide")
 
+# --- TEMA PERSONALIZZATO (font + card riutilizzabili in tutta l'app) ---
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Sora', sans-serif;
+}
+
+h1, h2, h3 {
+    font-weight: 700 !important;
+    letter-spacing: -0.02em;
+}
+
+.stButton > button {
+    border-radius: 10px;
+    font-weight: 600;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.stButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(34, 211, 166, 0.25);
+}
+
+.nexus-card {
+    background: linear-gradient(135deg, rgba(34,211,166,0.08), rgba(27,34,48,0.6));
+    border: 1px solid rgba(34,211,166,0.25);
+    border-radius: 16px;
+    padding: 1.1rem 1.4rem;
+    margin-bottom: 1rem;
+}
+.nexus-card h3 {
+    margin: 0 0 0.3rem 0;
+}
+.nexus-card .nexus-sub {
+    opacity: 0.75;
+    font-size: 0.88rem;
+    margin-bottom: 0.6rem;
+}
+.nexus-badge {
+    display: inline-block;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.nexus-badge-green  { background: rgba(34,211,166,0.18); color: #22D3A6; }
+.nexus-badge-orange { background: rgba(245,158,11,0.18); color: #F59E0B; }
+.nexus-badge-red    { background: rgba(239,68,68,0.18);  color: #EF4444; }
+</style>
+""", unsafe_allow_html=True)
+
+
+def badge_padronanza(media_voto):
+    """Restituisce l'HTML di un badge colorato in base alla media dei voti."""
+    if media_voto >= 80:
+        classe, etichetta = "nexus-badge-green", "Padronanza alta"
+    elif media_voto >= 50:
+        classe, etichetta = "nexus-badge-orange", "Da consolidare"
+    else:
+        classe, etichetta = "nexus-badge-red", "Da ripassare"
+    return f'<span class="nexus-badge {classe}">{etichetta} · {media_voto:.0f}%</span>'
+
 # --- LOCAL STORAGE DEL BROWSER (isolato per ogni visitatore del link) ---
 localS = LocalStorage()
 CHIAVE_PROFILO_LOCALE = "nexus_profilo_v1"
@@ -45,6 +108,9 @@ def salva_profilo_locale(contesto="generico"):
 
 if 'database_domande' not in st.session_state:
     st.session_state.database_domande = {}
+
+if 'conferma_elimina' not in st.session_state:
+    st.session_state.conferma_elimina = None
 
 # Al primo caricamento della sessione, prova a ripristinare automaticamente
 # il profilo salvato in precedenza in QUESTO browser.
@@ -267,13 +333,21 @@ if modalita == "🏠 Home & Istruzioni":
 
         st.markdown("---")
         for materia, argomenti in st.session_state.database_domande.items():
-            with st.container():
-                st.markdown(f"### 🧬 {materia}")
-                domande_materia = sum(len(d) for d in argomenti.values())
-                st.caption(f"{len(argomenti)} Argomenti | {domande_materia} Domande totali")
-                tags = " | ".join([f"*{arg}*" for arg in argomenti.keys()])
-                st.write(tags)
-                st.markdown("---")
+            domande_materia = [d for lista in argomenti.values() for d in lista]
+            n_domande = len(domande_materia)
+            voti = [d['punteggio'] for d in domande_materia if d.get('storico')]
+            media_voto = sum(voti) / len(voti) if voti else 0.0
+            badge = badge_padronanza(media_voto) if voti else '<span class="nexus-badge nexus-badge-orange">Ancora da iniziare</span>'
+            tags = " &nbsp;·&nbsp; ".join([f"<i>{arg}</i>" for arg in argomenti.keys()])
+
+            st.markdown(f"""
+            <div class="nexus-card">
+                <h3>🧬 {materia}</h3>
+                <div class="nexus-sub">{len(argomenti)} argomenti &nbsp;|&nbsp; {n_domande} domande totali</div>
+                {badge}
+                <div style="margin-top:0.6rem; opacity:0.85; font-size:0.9rem;">{tags}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
         with st.expander("📖 Rileggi la Guida all'Uso e i Consigli"):
             st.write("1. **API Key:** Ottienila gratis da Google AI Studio e incollala a sinistra.")
@@ -555,26 +629,57 @@ elif modalita == "📈 Dashboard Mastery":
 
         st.markdown("---")
 
-        for nome_argomento, lista_domande in argomenti.items():
+        for nome_argomento, lista_domande in list(argomenti.items()):
+            voti_argomento = [d['punteggio'] for d in lista_domande if d.get('storico')]
+            media_argomento = sum(voti_argomento) / len(voti_argomento) if voti_argomento else None
+
             with st.expander(f"📁 {nome_argomento} ({len(lista_domande)} domande)"):
 
-                # --- PULSANTE MAGICO PER GENERARE ALTRE DOMANDE ---
-                if st.button(f"➕ Genera 1 nuova domanda su '{nome_argomento}'", key=f"btn_{nome_argomento}"):
-                    if api_key:
-                        with st.spinner("Creazione in corso... ⏳"):
-                            prompt_nuova = f"Sei un professore universitario. Genera UNA singola domanda d'esame complessa sulla materia '{materia_dash}', focalizzata in particolare sull'argomento '{nome_argomento}'. Restituisci SOLO il testo della domanda, senza numerazione o altro."
-                            try:
-                                nuova_domanda = interroga_ai_con_fallback(prompt_nuova).strip()
+                if media_argomento is not None:
+                    st.markdown(badge_padronanza(media_argomento), unsafe_allow_html=True)
+                else:
+                    st.markdown('<span class="nexus-badge nexus-badge-orange">Ancora da iniziare</span>', unsafe_allow_html=True)
 
-                                if nuova_domanda:
-                                    st.session_state.database_domande[materia_dash][nome_argomento].append({"testo": nuova_domanda, "punteggio": 0, "storico": []})
-                                    salva_profilo_locale("dashboard")
-                                    st.success("Domanda aggiunta con successo!")
-                                    st.rerun()
-                            except Exception as e:
-                                st.error(f"Errore durante la generazione: {e}")
-                    else:
-                        st.error("Inserisci l'API Key nella barra laterale per usare questa funzione.")
+                chiave_arg = f"argomento::{materia_dash}::{nome_argomento}"
+
+                col_genera, col_elimina_arg = st.columns([3, 1])
+                with col_genera:
+                    # --- PULSANTE MAGICO PER GENERARE ALTRE DOMANDE ---
+                    if st.button(f"➕ Genera 1 nuova domanda su '{nome_argomento}'", key=f"btn_{nome_argomento}"):
+                        if api_key:
+                            with st.spinner("Creazione in corso... ⏳"):
+                                prompt_nuova = f"Sei un professore universitario. Genera UNA singola domanda d'esame complessa sulla materia '{materia_dash}', focalizzata in particolare sull'argomento '{nome_argomento}'. Restituisci SOLO il testo della domanda, senza numerazione o altro."
+                                try:
+                                    nuova_domanda = interroga_ai_con_fallback(prompt_nuova).strip()
+
+                                    if nuova_domanda:
+                                        st.session_state.database_domande[materia_dash][nome_argomento].append({"testo": nuova_domanda, "punteggio": 0, "storico": []})
+                                        salva_profilo_locale("dashboard")
+                                        st.success("Domanda aggiunta con successo!")
+                                        st.rerun()
+                                except Exception as e:
+                                    st.error(f"Errore durante la generazione: {e}")
+                        else:
+                            st.error("Inserisci l'API Key nella barra laterale per usare questa funzione.")
+                with col_elimina_arg:
+                    if st.button("🗑️ Elimina argomento", key=f"del_arg_{nome_argomento}"):
+                        st.session_state.conferma_elimina = chiave_arg
+                        st.rerun()
+
+                if st.session_state.conferma_elimina == chiave_arg:
+                    st.warning(f"⚠️ Eliminare tutto l'argomento **'{nome_argomento}'** e le sue {len(lista_domande)} domande? Non è reversibile (a meno di ricaricare un backup precedente).")
+                    col_si, col_no = st.columns(2)
+                    with col_si:
+                        if st.button("✅ Sì, elimina definitivamente", key=f"conferma_del_arg_{nome_argomento}"):
+                            del st.session_state.database_domande[materia_dash][nome_argomento]
+                            st.session_state.conferma_elimina = None
+                            salva_profilo_locale("elimina_argomento")
+                            st.success(f"Argomento '{nome_argomento}' eliminato.")
+                            st.rerun()
+                    with col_no:
+                        if st.button("❌ Annulla", key=f"annulla_del_arg_{nome_argomento}"):
+                            st.session_state.conferma_elimina = None
+                            st.rerun()
 
                 # --- GRAFICO DI ANDAMENTO SPECIFICO PER QUESTO ARGOMENTO ---
                 storico_argomento = [v for v in storico_completo if v["argomento"] == nome_argomento]
@@ -585,9 +690,10 @@ elif modalita == "📈 Dashboard Mastery":
 
                 st.markdown("---")
 
-                # Lista delle domande con le barre di progresso
+                # Lista delle domande con le barre di progresso e l'eliminazione singola
                 for idx, d in enumerate(lista_domande):
-                    col_testo, col_barra = st.columns([3, 1])
+                    chiave_dom = f"domanda::{materia_dash}::{nome_argomento}::{idx}"
+                    col_testo, col_barra, col_elimina_d = st.columns([3, 1, 1])
                     with col_testo:
                         st.write(f"**{idx + 1}.** {d['testo']}")
                     with col_barra:
@@ -598,3 +704,21 @@ elif modalita == "📈 Dashboard Mastery":
                             st.warning(f"{d['punteggio']}%")
                         else:
                             st.error(f"{d['punteggio']}%")
+                    with col_elimina_d:
+                        if st.button("🗑️", key=f"del_dom_{nome_argomento}_{idx}", help="Elimina questa domanda"):
+                            st.session_state.conferma_elimina = chiave_dom
+                            st.rerun()
+
+                    if st.session_state.conferma_elimina == chiave_dom:
+                        st.warning("Eliminare questa domanda?")
+                        col_si_d, col_no_d = st.columns(2)
+                        with col_si_d:
+                            if st.button("✅ Conferma", key=f"conferma_del_dom_{nome_argomento}_{idx}"):
+                                del st.session_state.database_domande[materia_dash][nome_argomento][idx]
+                                st.session_state.conferma_elimina = None
+                                salva_profilo_locale("elimina_domanda")
+                                st.rerun()
+                        with col_no_d:
+                            if st.button("❌ Annulla", key=f"annulla_del_dom_{nome_argomento}_{idx}"):
+                                st.session_state.conferma_elimina = None
+                                st.rerun()
