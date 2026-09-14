@@ -135,6 +135,40 @@ def prepara_immagine_lavagna(canvas_result):
     return immagine_finale.convert('RGB')
 
 
+# --- FUNZIONE PER IL RIPASSO INTELLIGENTE (SPACED REPETITION SEMPLIFICATA) ---
+def calcola_priorita_domanda(domanda):
+    """
+    Assegna un peso più alto alle domande che meritano più attenzione:
+    - mai risposte -> priorità massima
+    - voto basso -> priorità alta
+    - non ripassate da molto tempo -> priorità che cresce nel tempo
+    Restituisce (peso, motivo_leggibile) da mostrare all'utente per trasparenza.
+    """
+    storico = domanda.get("storico", [])
+
+    if not storico:
+        return 100.0, "non hai mai risposto a questa domanda"
+
+    ultimo = storico[-1]
+    ultimo_voto = ultimo.get("voto", 0)
+
+    try:
+        data_ultimo = datetime.strptime(ultimo["data"], "%Y-%m-%d %H:%M")
+        giorni_trascorsi = (datetime.now() - data_ultimo).days
+    except (ValueError, KeyError):
+        giorni_trascorsi = 0
+
+    priorita_da_voto = max(5, 100 - ultimo_voto)  # voto basso -> priorità alta
+    fattore_tempo = 1 + min(giorni_trascorsi, 30) / 10.0  # cresce nel tempo, con un tetto a 30 giorni
+    peso = priorita_da_voto * fattore_tempo
+
+    quando = "oggi" if giorni_trascorsi <= 0 else (
+        "ieri" if giorni_trascorsi == 1 else f"{giorni_trascorsi} giorni fa"
+    )
+    motivo = f"ultimo voto {ultimo_voto}%, risposto {quando}"
+    return peso, motivo
+
+
 # --- BARRA LATERALE E GESTIONE PROFILO ---
 st.sidebar.title("🧬 Nexus Ecosistema")
 api_key = st.sidebar.text_input(
@@ -319,15 +353,35 @@ elif modalita == "🎙️ Simulazione Esame":
         argomenti_disponibili = list(st.session_state.database_domande[materia_quiz].keys())
         argomento_scelto = st.selectbox("Focus sull'argomento:", ["Mix Casuale (Tutto)"] + argomenti_disponibili)
 
+        modalita_scelta_domanda = st.radio(
+            "Come scegliere la prossima domanda:",
+            ["🧠 Ripasso Intelligente (consigliata)", "🎲 Casuale pura"],
+            horizontal=True,
+            help="Il Ripasso Intelligente dà priorità alle domande mai fatte, con voto basso, o non ripassate da tempo."
+        )
+
         if 'domanda_ai' not in st.session_state or st.button("🔄 Prossima Domanda"):
+            # Costruisce il pool di domande su cui pescare, in base al filtro argomento
             if argomento_scelto == "Mix Casuale (Tutto)":
-                argomento_random = random.choice(argomenti_disponibili)
-                st.session_state.domanda_ai = random.choice(st.session_state.database_domande[materia_quiz][argomento_random])
+                pool_domande = [d for arg in argomenti_disponibili for d in st.session_state.database_domande[materia_quiz][arg]]
             else:
-                st.session_state.domanda_ai = random.choice(st.session_state.database_domande[materia_quiz][argomento_scelto])
+                pool_domande = st.session_state.database_domande[materia_quiz][argomento_scelto]
+
+            if modalita_scelta_domanda.startswith("🧠"):
+                pesi_e_motivi = [calcola_priorita_domanda(d) for d in pool_domande]
+                pesi = [p for p, _ in pesi_e_motivi]
+                indice_scelto = random.choices(range(len(pool_domande)), weights=pesi, k=1)[0]
+                st.session_state.domanda_ai = pool_domande[indice_scelto]
+                st.session_state.motivo_scelta_domanda = pesi_e_motivi[indice_scelto][1]
+            else:
+                st.session_state.domanda_ai = random.choice(pool_domande)
+                st.session_state.motivo_scelta_domanda = "selezione casuale"
 
         st.info(f"**Domanda:** {st.session_state.domanda_ai['testo']}")
-        st.caption(f"Ultimo punteggio: {st.session_state.domanda_ai['punteggio']}%")
+        st.caption(
+            f"Ultimo punteggio: {st.session_state.domanda_ai['punteggio']}%  ·  "
+            f"🧠 Scelta perché: {st.session_state.get('motivo_scelta_domanda', 'prima domanda della sessione')}"
+        )
 
         # --- SCELTA DELLA MODALITA' DI RISPOSTA ---
         tipo_risposta = st.radio("Scegli come rispondere:", ["⌨️ Testo Classico", "🖍️ Lavagna Interattiva (Disegno/Formule)"])
@@ -465,6 +519,17 @@ elif modalita == "📈 Dashboard Mastery":
 
     if materia_dash:
         argomenti = st.session_state.database_domande[materia_dash]
+
+        # --- ARGOMENTO CONSIGLIATO PER IL RIPASSO (stessa logica del Ripasso Intelligente) ---
+        priorita_per_argomento = {}
+        for nome_arg, lista_d in argomenti.items():
+            if lista_d:
+                pesi = [calcola_priorita_domanda(d)[0] for d in lista_d]
+                priorita_per_argomento[nome_arg] = sum(pesi) / len(pesi)
+
+        if priorita_per_argomento:
+            argomento_consigliato = max(priorita_per_argomento, key=priorita_per_argomento.get)
+            st.info(f"🎯 **Argomento consigliato per il prossimo ripasso:** {argomento_consigliato}")
 
         # --- RACCOLTA DI TUTTO LO STORICO DELLA MATERIA (per i grafici) ---
         storico_completo = []
