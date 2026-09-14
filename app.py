@@ -7,6 +7,8 @@ import json
 import io
 import time
 import numpy as np
+import pandas as pd
+from datetime import datetime
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 from streamlit_local_storage import LocalStorage
@@ -295,7 +297,7 @@ elif modalita == "⚙️ Aggiungi PDF":
                                 st.session_state.database_domande[materia_target][argomento_corrente] = []
                         elif riga.startswith("- "):
                             domanda_testo = riga.replace("- ", "").strip()
-                            st.session_state.database_domande[materia_target][argomento_corrente].append({"testo": domanda_testo, "punteggio": 0})
+                            st.session_state.database_domande[materia_target][argomento_corrente].append({"testo": domanda_testo, "punteggio": 0, "storico": []})
                             totale_domande += 1
 
                     salva_profilo_locale("pdf")
@@ -429,6 +431,15 @@ Poi:
                         if match:
                             voto = int(match.group(1))
                             st.session_state.domanda_ai['punteggio'] = voto
+
+                            # Compatibilità con profili salvati prima dell'introduzione dello storico
+                            if 'storico' not in st.session_state.domanda_ai:
+                                st.session_state.domanda_ai['storico'] = []
+                            st.session_state.domanda_ai['storico'].append({
+                                "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                "voto": voto
+                            })
+
                             salva_profilo_locale("voto")
                             if voto >= 90: st.balloons()
 
@@ -454,6 +465,31 @@ elif modalita == "📈 Dashboard Mastery":
 
     if materia_dash:
         argomenti = st.session_state.database_domande[materia_dash]
+
+        # --- RACCOLTA DI TUTTO LO STORICO DELLA MATERIA (per i grafici) ---
+        storico_completo = []
+        for nome_arg, lista_d in argomenti.items():
+            for d in lista_d:
+                for voce in d.get("storico", []):  # .get() per compatibilità con profili vecchi
+                    storico_completo.append({
+                        "data": voce["data"],
+                        "voto": voce["voto"],
+                        "argomento": nome_arg
+                    })
+
+        st.subheader("📈 Andamento nel tempo")
+        if storico_completo:
+            df_storico = pd.DataFrame(storico_completo)
+            df_storico["data"] = pd.to_datetime(df_storico["data"])
+            df_storico["giorno"] = df_storico["data"].dt.date
+            andamento_giornaliero = df_storico.groupby("giorno")["voto"].mean()
+            st.line_chart(andamento_giornaliero)
+            st.caption("Media dei voti ottenuti per giorno, su tutta la materia.")
+        else:
+            st.info("Non hai ancora correzioni registrate con data. Rispondi ad alcune domande in 🎙️ Simulazione Esame per iniziare a popolare questo grafico.")
+
+        st.markdown("---")
+
         for nome_argomento, lista_domande in argomenti.items():
             with st.expander(f"📁 {nome_argomento} ({len(lista_domande)} domande)"):
 
@@ -466,7 +502,7 @@ elif modalita == "📈 Dashboard Mastery":
                                 nuova_domanda = interroga_ai_con_fallback(prompt_nuova).strip()
 
                                 if nuova_domanda:
-                                    st.session_state.database_domande[materia_dash][nome_argomento].append({"testo": nuova_domanda, "punteggio": 0})
+                                    st.session_state.database_domande[materia_dash][nome_argomento].append({"testo": nuova_domanda, "punteggio": 0, "storico": []})
                                     salva_profilo_locale("dashboard")
                                     st.success("Domanda aggiunta con successo!")
                                     st.rerun()
@@ -474,6 +510,13 @@ elif modalita == "📈 Dashboard Mastery":
                                 st.error(f"Errore durante la generazione: {e}")
                     else:
                         st.error("Inserisci l'API Key nella barra laterale per usare questa funzione.")
+
+                # --- GRAFICO DI ANDAMENTO SPECIFICO PER QUESTO ARGOMENTO ---
+                storico_argomento = [v for v in storico_completo if v["argomento"] == nome_argomento]
+                if storico_argomento:
+                    df_arg = pd.DataFrame(storico_argomento).sort_values("data")
+                    df_arg["data"] = pd.to_datetime(df_arg["data"])
+                    st.line_chart(df_arg.set_index("data")["voto"])
 
                 st.markdown("---")
 
