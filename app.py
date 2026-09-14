@@ -34,8 +34,7 @@ def salva_profilo_locale(contesto="generico"):
     try:
         localS.setItem(
             CHIAVE_PROFILO_LOCALE,
-            json.dumps(st.session_state.database_domande),
-            key=f"salva_profilo_{contesto}"
+            json.dumps(st.session_state.database_domande)
         )
         time.sleep(0.3)  # dà tempo al browser di completare la scrittura
     except Exception:
@@ -49,7 +48,7 @@ if 'database_domande' not in st.session_state:
 # il profilo salvato in precedenza in QUESTO browser.
 if 'profilo_locale_caricato' not in st.session_state:
     st.session_state.profilo_locale_caricato = True
-    profilo_salvato = localS.getItem(CHIAVE_PROFILO_LOCALE, key="carica_profilo_iniziale")
+    profilo_salvato = localS.getItem(CHIAVE_PROFILO_LOCALE)
     if profilo_salvato:
         try:
             st.session_state.database_domande = json.loads(profilo_salvato)
@@ -59,7 +58,7 @@ if 'profilo_locale_caricato' not in st.session_state:
 # Stessa logica per l'API key, ma solo se l'utente ha esplicitamente
 # scelto di farla ricordare (vedi checkbox in sidebar più sotto).
 if 'api_key_locale_precaricata' not in st.session_state:
-    valore_salvato = localS.getItem(CHIAVE_API_KEY_LOCALE, key="carica_api_key_iniziale")
+    valore_salvato = localS.getItem(CHIAVE_API_KEY_LOCALE)
     st.session_state.api_key_locale_precaricata = valore_salvato if valore_salvato else ""
 
 # --- FUNZIONE MOTORE IA (MULTIMODALE CON FALLBACK) ---
@@ -150,10 +149,10 @@ ricorda_api_key = st.sidebar.checkbox(
 )
 
 if ricorda_api_key and api_key and api_key != st.session_state.api_key_locale_precaricata:
-    localS.setItem(CHIAVE_API_KEY_LOCALE, api_key, key="salva_api_key")
+    localS.setItem(CHIAVE_API_KEY_LOCALE, api_key)
     st.session_state.api_key_locale_precaricata = api_key
 elif not ricorda_api_key and st.session_state.api_key_locale_precaricata:
-    localS.setItem(CHIAVE_API_KEY_LOCALE, "", key="rimuovi_api_key")
+    localS.setItem(CHIAVE_API_KEY_LOCALE, "")
     st.session_state.api_key_locale_precaricata = ""
 
 if api_key:
