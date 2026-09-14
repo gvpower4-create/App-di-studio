@@ -291,12 +291,13 @@ if file_profilo is not None:
         st.rerun()
 
 st.sidebar.markdown("---")
-modalita = st.sidebar.radio("Navigazione:", ["🏠 Home & Istruzioni", "⚙️ Aggiungi PDF", "🎙️ Simulazione Esame", "📈 Dashboard Mastery"])
+st.markdown("---")
+tab_home, tab_pdf, tab_sim, tab_dash = st.tabs(["🏠 Home & Istruzioni", "⚙️ Aggiungi PDF", "🎙️ Simulazione Esame", "📈 Dashboard Mastery"])
 
 # ==========================================
 # MODULO 1: HOME & ISTRUZIONI (Versione Integrale)
 # ==========================================
-if modalita == "🏠 Home & Istruzioni":
+with tab_home:
     if not st.session_state.database_domande:
         st.title("Benvenuto in Nexus Study 🧬")
         st.write("La piattaforma dinamica per preparare i tuoi esami universitari tramite *Active Recall* e Intelligenza Artificiale.")
@@ -357,7 +358,7 @@ if modalita == "🏠 Home & Istruzioni":
 # ==========================================
 # MODULO 2: LETTURA PDF
 # ==========================================
-elif modalita == "⚙️ Aggiungi PDF":
+with tab_pdf:
     st.title("⚙️ Estrazione Massiva per Argomenti")
 
     col1, col2 = st.columns(2)
@@ -416,7 +417,7 @@ elif modalita == "⚙️ Aggiungi PDF":
 # ==========================================
 # MODULO 3: SIMULAZIONE (MOTORE MULTIMODALE - CORRETTO)
 # ==========================================
-elif modalita == "🎙️ Simulazione Esame":
+with tab_sim:
     st.title("🎙️ Simulazione Interattiva")
 
     materia_quiz = st.selectbox("Scegli la materia:", list(st.session_state.database_domande.keys()) if st.session_state.database_domande else [])
@@ -585,7 +586,7 @@ Poi:
 # ==========================================
 # MODULO 4: DASHBOARD MASTERY (Versione Integrale)
 # ==========================================
-elif modalita == "📈 Dashboard Mastery":
+with tab_dash:
     st.title("📈 Dashboard a Espansione")
     st.write("Apri gli argomenti per visualizzare le domande. Clicca sui pulsanti per generare nuove domande al volo.")
 
