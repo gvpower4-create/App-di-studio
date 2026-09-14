@@ -1,0 +1,9 @@
+[theme]
+# Palette ispirata al tema "biotech": indaco profondo + accento teal/verde acqua,
+# coerente con l'emoji 🧬 usata in tutta l'app.
+base = "dark"
+primaryColor = "#22D3A6"            # teal acceso: bottoni, elementi attivi, progress bar
+backgroundColor = "#0E1117"         # sfondo principale, quasi nero-blu
+secondaryBackgroundColor = "#1B2230" # sidebar, expander, input
+textColor = "#E5E7EB"               # grigio chiaro, alto contrasto ma non bianco puro
+font = "sans serif"
