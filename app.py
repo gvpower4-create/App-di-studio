@@ -118,6 +118,12 @@ if 'spessore_penna' not in st.session_state:
 if 'spessore_gomma' not in st.session_state:
     st.session_state.spessore_gomma = 30
 
+MAX_LAVAGNE = 5
+if 'lavagne' not in st.session_state:
+    st.session_state.lavagne = [{"json_data": None, "immagine": None}]
+if 'pagina_corrente' not in st.session_state:
+    st.session_state.pagina_corrente = 0
+
 # Al primo caricamento della sessione, prova a ripristinare automaticamente
 # il profilo salvato in precedenza in QUESTO browser.
 if 'profilo_locale_caricato' not in st.session_state:
@@ -140,13 +146,13 @@ if 'corso_laurea_precaricato' not in st.session_state:
     st.session_state.corso_laurea_precaricato = valore_corso if valore_corso else ""
 
 # --- FUNZIONE MOTORE IA (MULTIMODALE CON FALLBACK) ---
-def interroga_ai_con_fallback(prompt_testo, immagine_pill=None):
-    """Prova i modelli in sequenza. Se c'è un'immagine, la invia insieme al testo."""
+def interroga_ai_con_fallback(prompt_testo, immagini_pil=None):
+    """Prova i modelli in sequenza. Se ci sono immagini (una lista), le invia tutte insieme al testo."""
     for nome_modello in LISTA_MODELLI:
         try:
             modello = genai.GenerativeModel(nome_modello)
-            if immagine_pill is not None:
-                risposta = modello.generate_content([prompt_testo, immagine_pill])
+            if immagini_pil:
+                risposta = modello.generate_content([prompt_testo] + list(immagini_pil))
             else:
                 risposta = modello.generate_content(prompt_testo)
             return risposta.text
@@ -491,6 +497,10 @@ with tab_sim:
                 st.session_state.domanda_ai = random.choice(pool_domande)
                 st.session_state.motivo_scelta_domanda = "selezione casuale"
 
+            # Nuova domanda -> si riparte con una lavagna singola e vuota
+            st.session_state.lavagne = [{"json_data": None, "immagine": None}]
+            st.session_state.pagina_corrente = 0
+
         st.info(f"**Domanda:** {st.session_state.domanda_ai['testo']}")
         st.caption(
             f"Ultimo punteggio: {st.session_state.domanda_ai['punteggio']}%  ·  "
@@ -509,13 +519,49 @@ with tab_sim:
 
         elif tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
             st.write("Usa il mouse o il pennino per disegnare le tue formule o grafici.")
+            st.caption(
+                "💡 Per avere più spazio, collassa la barra laterale con la freccia « in alto a sinistra: "
+                "il canvas ha una dimensione fissa e se lo spazio disponibile è più stretto, il browser "
+                "lo ridimensiona e il tratto appare sfocato."
+            )
+
+            # --- NAVIGAZIONE TRA PIÙ LAVAGNE (fino a 5, inviate tutte insieme) ---
+            n_pagine = len(st.session_state.lavagne)
+            pagina = st.session_state.pagina_corrente
+
+            col_prev, col_label, col_next, col_new, col_del = st.columns([1, 2, 1, 1.3, 1.3])
+            with col_prev:
+                if st.button("◀", disabled=(pagina == 0), key="pagina_precedente"):
+                    st.session_state.pagina_corrente -= 1
+                    st.rerun()
+            with col_label:
+                st.markdown(
+                    f"<div style='text-align:center; padding-top:0.4rem;'>Lavagna <b>{pagina + 1}</b> di {n_pagine}</div>",
+                    unsafe_allow_html=True
+                )
+            with col_next:
+                if st.button("▶", disabled=(pagina == n_pagine - 1), key="pagina_successiva"):
+                    st.session_state.pagina_corrente += 1
+                    st.rerun()
+            with col_new:
+                if st.button("➕ Nuova lavagna", disabled=(n_pagine >= MAX_LAVAGNE), key="nuova_lavagna"):
+                    st.session_state.lavagne.append({"json_data": None, "immagine": None})
+                    st.session_state.pagina_corrente = len(st.session_state.lavagne) - 1
+                    st.rerun()
+            with col_del:
+                if st.button("🗑️ Elimina questa", disabled=(n_pagine <= 1), key="elimina_lavagna"):
+                    del st.session_state.lavagne[pagina]
+                    st.session_state.pagina_corrente = max(0, pagina - 1)
+                    st.rerun()
 
             col_tool, col_color, col_size = st.columns([2, 1, 1])
             with col_tool:
                 tipo_strumento = st.radio(
                     "Strumento:",
-                    ["✏️ Penna", "🧼 Gomma", "📏 Linea", "⭕ Cerchio", "🟩 Rettangolo"],
-                    horizontal=True
+                    ["✏️ Penna", "🧼 Gomma"],
+                    horizontal=True,
+                    help="Linea/Cerchio/Rettangolo sono stati temporaneamente rimossi: "
+                         "un bug della libreria di disegno li rende invisibili anche disegnandoli correttamente."
                 )
             with col_color:
                 colore_penna = st.color_picker("Colore penna:", value="#000000")
@@ -530,16 +576,20 @@ with tab_sim:
                 stroke_color = "#FFFFFF"
             else:
                 with col_size:
-                    stroke_width = st.slider("Spessore tratto:", 1, 15, key="spessore_penna")
+                    stroke_width = st.slider(
+                        "Spessore tratto:", 2, 15, key="spessore_penna",
+                        help="Con tratti molto sottili e scrittura veloce, il pennello può perdere "
+                             "qualche punto e unirlo con una linea dritta: se noti questo effetto, "
+                             "prova ad alzare leggermente lo spessore."
+                    )
                 stroke_color = colore_penna
-                if tipo_strumento == "✏️ Penna": drawing_mode = "freedraw"
-                elif tipo_strumento == "📏 Linea": drawing_mode = "line"
-                elif tipo_strumento == "⭕ Cerchio": drawing_mode = "circle"
-                elif tipo_strumento == "🟩 Rettangolo": drawing_mode = "rect"
 
-            LARGHEZZA_LAVAGNA, ALTEZZA_LAVAGNA = 1000, 480
+            LARGHEZZA_LAVAGNA, ALTEZZA_LAVAGNA = 900, 450
             foglio_di_carta = Image.new("RGB", (LARGHEZZA_LAVAGNA, ALTEZZA_LAVAGNA), (255, 255, 255))
 
+            # initial_drawing ripristina i tratti già fatti su questa pagina quando
+            # si torna indietro dopo aver visitato un'altra lavagna (il componente
+            # si rimonta da zero ad ogni cambio pagina, altrimenti perderebbe tutto).
             canvas_result = st_canvas(
                 fill_color="rgba(0, 0, 0, 0)",
                 stroke_width=stroke_width,
@@ -548,9 +598,19 @@ with tab_sim:
                 width=LARGHEZZA_LAVAGNA,
                 height=ALTEZZA_LAVAGNA,
                 drawing_mode=drawing_mode,
+                initial_drawing=st.session_state.lavagne[pagina]["json_data"],
                 return_image_data=True,  # OBBLIGATORIO da streamlit-drawable-canvas 0.10.0: senza questo, .image_data solleva RuntimeError
-                key="canvas_principale_univoco",
+                key=f"canvas_lavagna_{pagina}",
             )
+
+            # Cattura continuamente lo stato di QUESTA pagina (vettoriale + raster),
+            # così resta disponibile anche dopo essere passati a un'altra lavagna.
+            if canvas_result is not None:
+                if canvas_result.json_data is not None:
+                    st.session_state.lavagne[pagina]["json_data"] = canvas_result.json_data
+                immagine_pagina = prepara_immagine_lavagna(canvas_result)
+                if immagine_pagina is not None:
+                    st.session_state.lavagne[pagina]["immagine"] = immagine_pagina
 
             st.caption("Nota: Puoi lasciare vuoto il campo di testo se hai risposto interamente con il disegno.")
             nota_aggiuntiva = st.text_input(
@@ -560,22 +620,31 @@ with tab_sim:
 
         # --- INVIO AL PROFESSORE ---
         if st.button("Invia per la correzione"):
-            # Ricalcoliamo l'immagine QUI, nello stesso run del click, usando
-            # direttamente canvas_result (niente più dipendenza da session_state
-            # scritta in un try/except silenzioso).
-            immagine_da_inviare = None
+            # Ricalcoliamo l'immagine della pagina corrente QUI, nello stesso run
+            # del click, per essere sicuri di avere l'ultimissima versione.
+            immagini_da_inviare = []
             testo_per_ai = risposta_testuale
 
             if tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
-                immagine_da_inviare = prepara_immagine_lavagna(canvas_result)
+                immagine_corrente = prepara_immagine_lavagna(canvas_result)
+                if immagine_corrente is not None:
+                    st.session_state.lavagne[st.session_state.pagina_corrente]["immagine"] = immagine_corrente
+
+                immagini_da_inviare = [
+                    p["immagine"] for p in st.session_state.lavagne if p["immagine"] is not None
+                ]
                 testo_per_ai = nota_aggiuntiva
 
-            if testo_per_ai.strip() == "" and immagine_da_inviare is None:
-                st.warning("Inserisci una risposta testuale o fai un disegno sulla lavagna!")
+            if testo_per_ai.strip() == "" and not immagini_da_inviare:
+                st.warning("Inserisci una risposta testuale o fai un disegno su almeno una lavagna!")
             elif api_key:
-                with st.spinner("Il professore sta analizzando il tuo elaborato... ⏳"):
+                with st.spinner("Il tutor sta analizzando il tuo elaborato... ⏳"):
                     try:
                         contesto_corso = f'Lo studente segue il corso di laurea in "{corso_di_laurea}".' if corso_di_laurea.strip() else "Lo studente non ha specificato il corso di laurea."
+                        contesto_pagine = (
+                            f"La risposta è su {len(immagini_da_inviare)} lavagne/immagini separate, da leggere in ordine come un unico elaborato continuo."
+                            if len(immagini_da_inviare) > 1 else ""
+                        )
 
                         prompt_prof = f"""Sei un tutor universitario di {materia_quiz}, non un professore severo: sei dalla parte dello studente, lo aiuti a migliorare con trucchi pratici e una valutazione onesta ma costruttiva.
 
@@ -584,12 +653,13 @@ with tab_sim:
 DOMANDA D'ESAME:
 "{st.session_state.domanda_ai['testo']}"
 
-RISPOSTA DELLO STUDENTE (testo e/o immagine allegata):
-Testo: "{testo_per_ai if testo_per_ai.strip() else '(nessuna nota testuale, vedi solo immagine)'}"
+RISPOSTA DELLO STUDENTE (testo e/o immagini allegate):
+Testo: "{testo_per_ai if testo_per_ai.strip() else '(nessuna nota testuale, vedi solo immagini)'}"
+{contesto_pagine}
 
 ISTRUZIONI - segui questi passaggi ESATTAMENTE in ordine:
 
-1. TRASCRIZIONE FEDELE: descrivi SOLO ciò che è effettivamente visibile o scritto nella risposta (formule, testo, disegni). Non aggiungere, completare o correggere mentalmente nulla che lo studente non abbia realmente scritto. Se la scrittura è poco leggibile o ambigua, dillo esplicitamente invece di indovinare. Lo studente si fida di questa trascrizione, quindi deve essere accurata.
+1. TRASCRIZIONE FEDELE: descrivi SOLO ciò che è effettivamente visibile o scritto nella risposta (formule, testo, disegni), leggendo tutte le immagini in ordine come un unico discorso. Non aggiungere, completare o correggere mentalmente nulla che lo studente non abbia realmente scritto. Se la scrittura è poco leggibile o ambigua, dillo esplicitamente invece di indovinare. Lo studente si fida di questa trascrizione, quindi deve essere accurata.
 
 2. CONFRONTO CON LA DOMANDA: elenca esplicitamente quali punti richiesti dalla domanda sono stati affrontati e quali invece mancano o sono incompleti.
 
@@ -608,7 +678,7 @@ Poi:
 **Trucco Mnemonico:** [...]
 **🌟 Per il 30 e lode (extra, non richiesto per il 100%):** [1-2 spunti di approfondimento]"""
 
-                        risposta_finale = interroga_ai_con_fallback(prompt_prof, immagine_pill=immagine_da_inviare)
+                        risposta_finale = interroga_ai_con_fallback(prompt_prof, immagini_pil=immagini_da_inviare)
 
                         match = re.search(r'(\d{1,3})%', risposta_finale)
                         if match:
@@ -629,9 +699,10 @@ Poi:
                         st.write(risposta_finale)
 
                         # Utile per verificare visivamente cosa è stato davvero inviato all'AI
-                        if immagine_da_inviare is not None:
-                            with st.expander("🔍 Immagine effettivamente inviata all'AI"):
-                                st.image(immagine_da_inviare)
+                        if immagini_da_inviare:
+                            with st.expander(f"🔍 Le {len(immagini_da_inviare)} immagini inviate al tutor"):
+                                for i, img in enumerate(immagini_da_inviare):
+                                    st.image(img, caption=f"Lavagna {i + 1}")
                     except Exception as e:
                         st.error(f"Errore critico AI: {e}")
             else:
