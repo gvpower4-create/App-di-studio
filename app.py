@@ -384,6 +384,20 @@ with tab_pdf:
                     prompt = f"""
                     Agisci come professore di {materia_target}. Leggi: "{testo_estratto}"
                     Identifica i macro-argomenti e genera 3-5 domande per un esame {tipo_esame}.
+
+                    REGOLA FONDAMENTALE SULLA LUNGHEZZA E SUL FOCUS DELLE DOMANDE:
+                    Chi risponde scriverà o disegnerà la risposta a mano su una piccola lavagna
+                    digitale: le risposte devono restare brevi. Ogni domanda deve rientrare in
+                    UNA di queste due forme, mai una via di mezzo dispersiva:
+                    1. GENERICA e concettuale, che NON richieda una spiegazione lunga e
+                       dettagliata per essere risposta bene (es. "Qual è il significato fisico
+                       di X?", "Perché Y è importante in questo contesto?").
+                    2. PRECISA e circoscritta su UN SOLO procedimento, passaggio o formula
+                       specifica (es. "Deriva l'espressione di Y a partire da Z").
+                    È VIETATO incatenare più richieste diverse in una sola domanda (es.
+                    "Definisci X, poi dimostra Y, poi applica Z al caso W"): se il materiale
+                    richiede più passaggi, spezzali in domande separate distinte.
+
                     FORMATO ESATTO RICHIESTO:
                     ### ARGOMENTO: [Nome]
                     - [Domanda 1]
@@ -471,37 +485,43 @@ with tab_sim:
         elif tipo_risposta == "🖍️ Lavagna Interattiva (Disegno/Formule)":
             st.write("Usa il mouse o il pennino per disegnare le tue formule o grafici.")
 
-            col_tool, col_size = st.columns([2, 1])
+            col_tool, col_color, col_size = st.columns([2, 1, 1])
             with col_tool:
                 tipo_strumento = st.radio(
                     "Strumento:",
                     ["✏️ Penna", "🧼 Gomma", "📏 Linea", "⭕ Cerchio", "🟩 Rettangolo"],
                     horizontal=True
                 )
-            with col_size:
-                stroke_width = st.slider("Spessore tratto:", 1, 15, 3)
+            with col_color:
+                colore_penna = st.color_picker("Colore penna:", value="#000000")
+                if colore_penna.upper() == "#FFFFFF":
+                    st.caption("⚠️ Il bianco è invisibile sullo sfondo!")
 
             drawing_mode = "freedraw"
-            stroke_color = "#000000"
 
-            if tipo_strumento == "✏️ Penna": drawing_mode = "freedraw"
-            elif tipo_strumento == "🧼 Gomma":
-                drawing_mode = "freedraw"
+            if tipo_strumento == "🧼 Gomma":
+                with col_size:
+                    stroke_width = st.slider("Spessore gomma:", 10, 80, 30)
                 stroke_color = "#FFFFFF"
-                stroke_width = stroke_width + 5
-            elif tipo_strumento == "📏 Linea": drawing_mode = "line"
-            elif tipo_strumento == "⭕ Cerchio": drawing_mode = "circle"
-            elif tipo_strumento == "🟩 Rettangolo": drawing_mode = "rect"
+            else:
+                with col_size:
+                    stroke_width = st.slider("Spessore tratto:", 1, 15, 3)
+                stroke_color = colore_penna
+                if tipo_strumento == "✏️ Penna": drawing_mode = "freedraw"
+                elif tipo_strumento == "📏 Linea": drawing_mode = "line"
+                elif tipo_strumento == "⭕ Cerchio": drawing_mode = "circle"
+                elif tipo_strumento == "🟩 Rettangolo": drawing_mode = "rect"
 
-            foglio_di_carta = Image.new("RGB", (700, 350), (255, 255, 255))
+            LARGHEZZA_LAVAGNA, ALTEZZA_LAVAGNA = 1000, 480
+            foglio_di_carta = Image.new("RGB", (LARGHEZZA_LAVAGNA, ALTEZZA_LAVAGNA), (255, 255, 255))
 
             canvas_result = st_canvas(
                 fill_color="rgba(0, 0, 0, 0)",
                 stroke_width=stroke_width,
                 stroke_color=stroke_color,
                 background_image=foglio_di_carta,
-                width=700,
-                height=350,
+                width=LARGHEZZA_LAVAGNA,
+                height=ALTEZZA_LAVAGNA,
                 drawing_mode=drawing_mode,
                 return_image_data=True,  # OBBLIGATORIO da streamlit-drawable-canvas 0.10.0: senza questo, .image_data solleva RuntimeError
                 key="canvas_principale_univoco",
@@ -649,7 +669,14 @@ with tab_dash:
                     if st.button(f"➕ Genera 1 nuova domanda su '{nome_argomento}'", key=f"btn_{nome_argomento}"):
                         if api_key:
                             with st.spinner("Creazione in corso... ⏳"):
-                                prompt_nuova = f"Sei un professore universitario. Genera UNA singola domanda d'esame complessa sulla materia '{materia_dash}', focalizzata in particolare sull'argomento '{nome_argomento}'. Restituisci SOLO il testo della domanda, senza numerazione o altro."
+                                prompt_nuova = f"""Sei un professore universitario. Genera UNA singola domanda d'esame sulla materia '{materia_dash}', focalizzata in particolare sull'argomento '{nome_argomento}'.
+
+REGOLA: chi risponde scrive o disegna a mano su una piccola lavagna, quindi la domanda deve essere breve da rispondere. Fai UNA delle due cose, mai una via di mezzo dispersiva:
+1. Una domanda GENERICA/concettuale che non richieda una spiegazione lunga, OPPURE
+2. Una domanda PRECISA su UN SOLO procedimento o passaggio specifico.
+Non incatenare più richieste diverse nella stessa domanda.
+
+Restituisci SOLO il testo della domanda, senza numerazione o altro."""
                                 try:
                                     nuova_domanda = interroga_ai_con_fallback(prompt_nuova).strip()
 
