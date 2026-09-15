@@ -90,6 +90,7 @@ def badge_padronanza(media_voto):
 localS = LocalStorage()
 CHIAVE_PROFILO_LOCALE = "nexus_profilo_v1"
 CHIAVE_API_KEY_LOCALE = "nexus_api_key_v1"
+CHIAVE_CORSO_LOCALE = "nexus_corso_laurea_v1"
 
 
 def salva_profilo_locale(contesto="generico"):
@@ -112,6 +113,11 @@ if 'database_domande' not in st.session_state:
 if 'conferma_elimina' not in st.session_state:
     st.session_state.conferma_elimina = None
 
+if 'spessore_penna' not in st.session_state:
+    st.session_state.spessore_penna = 3
+if 'spessore_gomma' not in st.session_state:
+    st.session_state.spessore_gomma = 30
+
 # Al primo caricamento della sessione, prova a ripristinare automaticamente
 # il profilo salvato in precedenza in QUESTO browser.
 if 'profilo_locale_caricato' not in st.session_state:
@@ -128,6 +134,10 @@ if 'profilo_locale_caricato' not in st.session_state:
 if 'api_key_locale_precaricata' not in st.session_state:
     valore_salvato = localS.getItem(CHIAVE_API_KEY_LOCALE)
     st.session_state.api_key_locale_precaricata = valore_salvato if valore_salvato else ""
+
+if 'corso_laurea_precaricato' not in st.session_state:
+    valore_corso = localS.getItem(CHIAVE_CORSO_LOCALE)
+    st.session_state.corso_laurea_precaricato = valore_corso if valore_corso else ""
 
 # --- FUNZIONE MOTORE IA (MULTIMODALE CON FALLBACK) ---
 def interroga_ai_con_fallback(prompt_testo, immagine_pill=None):
@@ -237,6 +247,21 @@ def calcola_priorita_domanda(domanda):
 
 # --- BARRA LATERALE E GESTIONE PROFILO ---
 st.sidebar.title("🧬 Nexus Ecosistema")
+
+corso_di_laurea = st.sidebar.text_input(
+    "🎓 Il tuo corso di laurea:",
+    value=st.session_state.corso_laurea_precaricato,
+    placeholder="Es. Biotecnologie, Fisica, Ingegneria...",
+    help="Aiuta il tutor AI a calibrare il taglio delle correzioni sul tuo percorso "
+         "(es. più applicativo se non stai facendo la materia specialistica), "
+         "restando comunque fedele al programma che carichi tu — non abbassa gli standard."
+)
+if corso_di_laurea != st.session_state.corso_laurea_precaricato:
+    localS.setItem(CHIAVE_CORSO_LOCALE, corso_di_laurea)
+    st.session_state.corso_laurea_precaricato = corso_di_laurea
+
+st.sidebar.markdown("---")
+
 api_key = st.sidebar.text_input(
     "Inserisci la tua API Key:",
     type="password",
@@ -501,11 +526,11 @@ with tab_sim:
 
             if tipo_strumento == "🧼 Gomma":
                 with col_size:
-                    stroke_width = st.slider("Spessore gomma:", 10, 80, 30)
+                    stroke_width = st.slider("Spessore gomma:", 10, 80, key="spessore_gomma")
                 stroke_color = "#FFFFFF"
             else:
                 with col_size:
-                    stroke_width = st.slider("Spessore tratto:", 1, 15, 3)
+                    stroke_width = st.slider("Spessore tratto:", 1, 15, key="spessore_penna")
                 stroke_color = colore_penna
                 if tipo_strumento == "✏️ Penna": drawing_mode = "freedraw"
                 elif tipo_strumento == "📏 Linea": drawing_mode = "line"
@@ -550,7 +575,11 @@ with tab_sim:
             elif api_key:
                 with st.spinner("Il professore sta analizzando il tuo elaborato... ⏳"):
                     try:
-                        prompt_prof = f"""Sei un professore universitario di {materia_quiz}, rigoroso ma costruttivo nel tono.
+                        contesto_corso = f'Lo studente segue il corso di laurea in "{corso_di_laurea}".' if corso_di_laurea.strip() else "Lo studente non ha specificato il corso di laurea."
+
+                        prompt_prof = f"""Sei un tutor universitario di {materia_quiz}, non un professore severo: sei dalla parte dello studente, lo aiuti a migliorare con trucchi pratici e una valutazione onesta ma costruttiva.
+
+{contesto_corso} Se la materia non è il suo corso principale (es. Fisica per uno studente di Biotecnologie), calibra il taglio dei tuoi commenti sull'applicazione rilevante per quel percorso — MA senza abbassare gli standard di correttezza scientifica, e attenendoti sempre e solo al programma/materiale che lo studente ha effettivamente caricato, non a tue supposizioni su cosa "dovrebbe" sapere quel corso.
 
 DOMANDA D'ESAME:
 "{st.session_state.domanda_ai['testo']}"
@@ -560,19 +589,24 @@ Testo: "{testo_per_ai if testo_per_ai.strip() else '(nessuna nota testuale, vedi
 
 ISTRUZIONI - segui questi passaggi ESATTAMENTE in ordine:
 
-1. TRASCRIZIONE FEDELE: prima di tutto, descrivi SOLO ciò che è effettivamente visibile o scritto nella risposta (formule, testo, disegni). Non aggiungere, completare o correggere mentalmente nulla che lo studente non abbia realmente scritto, anche se ti aspetteresti di vederlo per rispondere pienamente alla domanda. Se la scrittura è poco leggibile o ambigua, dillo esplicitamente invece di indovinare.
+1. TRASCRIZIONE FEDELE: descrivi SOLO ciò che è effettivamente visibile o scritto nella risposta (formule, testo, disegni). Non aggiungere, completare o correggere mentalmente nulla che lo studente non abbia realmente scritto. Se la scrittura è poco leggibile o ambigua, dillo esplicitamente invece di indovinare. Lo studente si fida di questa trascrizione, quindi deve essere accurata.
 
-2. CONFRONTO CON LA DOMANDA: elenca esplicitamente quali punti richiesti dalla domanda sono stati affrontati nella trascrizione del punto 1, e quali invece MANCANO o sono incompleti. Sii specifico.
+2. CONFRONTO CON LA DOMANDA: elenca esplicitamente quali punti richiesti dalla domanda sono stati affrontati e quali invece mancano o sono incompleti.
 
-3. VOTO ONESTO: un voto alto (90-100%) richiede che OGNI parte della domanda sia stata trattata correttamente in ciò che lo studente ha realmente scritto. Se lo studente ha svolto solo una parte della domanda (anche se quella parte è perfetta), il voto deve riflettere la percentuale di domanda effettivamente coperta, non la qualità della sola parte svolta. Non essere generoso per incoraggiamento: sii onesto, il tono incoraggiante va nel testo dell'analisi, non nel voto.
+3. VOTO BASATO SULLA CORRETTEZZA RISPETTO A CIÒ CHE È STATO CHIESTO, NON SULL'ESAUSTIVITÀ DI DETTAGLI SECONDARI: il voto deve riflettere quanto ciò che lo studente ha scritto è corretto rispetto a ciò che la domanda ha EFFETTIVAMENTE richiesto — non quanti dettagli aggiuntivi non richiesti ha incluso. Se lo studente risponde in modo corretto ed essenziale a tutto ciò che la domanda chiede, il voto è alto (90-100%), anche se la risposta è sintetica e non esaustiva su aspetti collaterali. Il voto scende in proporzione a: (a) parti della domanda non trattate, (b) errori concettuali in ciò che è stato scritto. Non penalizzare la sinteticità in sé stessa: una risposta breve ma giusta rispetto a quanto chiesto merita un voto alto.
+
+4. COME SI SAREBBE RISPOSTO PER IL 100%: mostra la risposta ideale e completa a ciò che la domanda chiedeva (non di più), così lo studente ha un termine di paragone diretto con quello che ha scritto lui.
+
+5. CONSIGLI DA "30 E LODE" (opzionali, separati dal voto): in una sezione a parte, suggerisci 1-2 approfondimenti o collegamenti che, se aggiunti, avrebbero reso la risposta ancora più brillante — chiarisci che sono spunti extra, non requisiti per il 100%.
 
 FORMATO DI OUTPUT RICHIESTO (rispetta esattamente questa struttura):
-Riga 1: SOLO il voto da 0 a 100 seguito da % (Es: 65%)
+Riga 1: SOLO il voto da 0 a 100 seguito da % (Es: 85%)
 Poi:
 **Cosa hai scritto:** [la trascrizione fedele del punto 1]
 **Cosa manca rispetto alla domanda:** [punto 2, oppure "Nulla, hai coperto tutta la domanda" se è davvero così]
-**Analisi:** [valutazione di ciò che hai scritto]
-**Trucco Mnemonico:** [...]"""
+**Come si sarebbe risposto per il 100%:** [risposta ideale e completa a quanto richiesto dalla domanda]
+**Trucco Mnemonico:** [...]
+**🌟 Per il 30 e lode (extra, non richiesto per il 100%):** [1-2 spunti di approfondimento]"""
 
                         risposta_finale = interroga_ai_con_fallback(prompt_prof, immagine_pill=immagine_da_inviare)
 
