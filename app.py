@@ -500,6 +500,7 @@ with tab_sim:
             # Nuova domanda -> si riparte con una lavagna singola e vuota
             st.session_state.lavagne = [{"json_data": None, "immagine": None}]
             st.session_state.pagina_corrente = 0
+            st.session_state.ultima_pagina_renderizzata = None
 
         st.info(f"**Domanda:** {st.session_state.domanda_ai['testo']}")
         st.caption(
@@ -587,9 +588,16 @@ with tab_sim:
             LARGHEZZA_LAVAGNA, ALTEZZA_LAVAGNA = 900, 450
             foglio_di_carta = Image.new("RGB", (LARGHEZZA_LAVAGNA, ALTEZZA_LAVAGNA), (255, 255, 255))
 
-            # initial_drawing ripristina i tratti già fatti su questa pagina quando
-            # si torna indietro dopo aver visitato un'altra lavagna (il componente
-            # si rimonta da zero ad ogni cambio pagina, altrimenti perderebbe tutto).
+            # initial_drawing ripristina i tratti già fatti su questa pagina SOLO
+            # quando si arriva da un cambio pagina (il componente si rimonta da
+            # zero in quel caso). Passarlo ad ogni rerun - anche quelli generati
+            # dal disegno stesso - forza un reset continuo e causa lo sfarfallio
+            # (i tratti che spariscono e ricompaiono mentre scrivi).
+            if 'ultima_pagina_renderizzata' not in st.session_state:
+                st.session_state.ultima_pagina_renderizzata = None
+            pagina_appena_cambiata = st.session_state.ultima_pagina_renderizzata != pagina
+            st.session_state.ultima_pagina_renderizzata = pagina
+
             canvas_result = st_canvas(
                 fill_color="rgba(0, 0, 0, 0)",
                 stroke_width=stroke_width,
@@ -598,7 +606,7 @@ with tab_sim:
                 width=LARGHEZZA_LAVAGNA,
                 height=ALTEZZA_LAVAGNA,
                 drawing_mode=drawing_mode,
-                initial_drawing=st.session_state.lavagne[pagina]["json_data"],
+                initial_drawing=(st.session_state.lavagne[pagina]["json_data"] if pagina_appena_cambiata else None),
                 return_image_data=True,  # OBBLIGATORIO da streamlit-drawable-canvas 0.10.0: senza questo, .image_data solleva RuntimeError
                 key=f"canvas_lavagna_{pagina}",
             )
